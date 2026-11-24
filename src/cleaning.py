@@ -76,7 +76,11 @@ def restore_full_price(df):
     la collecte, remise comprise (Hollow Knight : 7,49 $ avec -50 %, pour
     un prix plein de 14,99 $). Prix plein = prix / (1 - remise / 100).
     Avec une remise de 100 %, le prix plein est impossible à retrouver.
+    Une remise vide est lue comme 0 % : sinon le jeu serait retiré sans raison
+    (une case vide n'est jamais < 100) et compté à tort dans ce filtre.
     """
+    df = df.copy()
+    df["discount"] = df["discount"].fillna(0)
     df = df[df["discount"] < 100].copy()
     df["price"] = (df["price"] / (1 - df["discount"] / 100)).round(2)
     return df.drop(columns="discount")
@@ -205,7 +209,11 @@ def clean_games(df):
     report = pd.DataFrame({"étape": list(rows_left), "lignes restantes": list(rows_left.values())})
     report["lignes retirées"] = (-report["lignes restantes"].diff()).fillna(0).astype(int)
     report["raison"] = report["étape"].map(reasons)
-    report = report[["étape", "lignes retirées", "lignes restantes", "raison"]]
+    # Part du fichier brut retirée par chaque filtre : plus parlant qu'un nombre
+    # de lignes pour la note (ex. « les jeux gratuits = 20 % du fichier »).
+    n_raw = report["lignes restantes"].iloc[0]
+    report["% du brut retiré"] = (100 * report["lignes retirées"] / n_raw).round(1)
+    report = report[["étape", "lignes retirées", "% du brut retiré", "lignes restantes", "raison"]]
 
     df_clean = df[CLEAN_COLUMNS].reset_index(drop=True)
     return df_clean, report

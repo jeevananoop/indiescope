@@ -13,8 +13,9 @@ import pandas as pd
 # Ajoute la racine du projet à sys.path pour pouvoir importer src/.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.analysis import find_comparables, has_all_tags, recommend_price  # noqa: E402
-from src.cleaning import parse_date, parse_owners, clean_tag_string  # noqa: E402
+from src.analysis import (find_comparables, has_all_tags, niche_table,  # noqa: E402
+                          promising_niches, recommend_price)
+from src.cleaning import parse_date, parse_owners, clean_tag_string, clean_games  # noqa: E402
 from src.estimation import add_estimates, estimate_sales, net_revenue  # noqa: E402
 from src.simulator import GameConcept, break_even_probability, recommendation  # noqa: E402
 
@@ -49,6 +50,38 @@ def test_cleaning_helpers():
     assert parse_owners("20000 - 50000") == (20000, 50000)
     assert parse_owners(None) == (None, None)
     assert clean_tag_string(" Indie , Action,,") == "Indie,Action"
+
+
+def make_mini_raw():
+    """Mini fichier brut de 7 jeux (noms de colonnes de games.csv), un piège par jeu."""
+    def game(app_id, name, date, price, discount, owners, tags):
+        return {"AppID": app_id, "Name": name, "Release date": date, "Price": price,
+                "Discount": discount, "Positive": 10, "Negative": 0,
+                "Estimated owners": owners, "Tags": tags}
+    games = [
+        game(1, "Bon jeu", "Aug 1, 2020", 5.0, 50, "20000 - 50000", "Indie , Action"),  # gardé
+        game(1, "Bon jeu", "Aug 1, 2020", 5.0, 50, "20000 - 50000", "Indie , Action"),  # doublon
+        game(2, "Gratuit", "Aug 1, 2020", 0.0, 0, "0 - 20000", "Indie"),               # gratuit
+        game(3, "Sans remise", "Mar 3, 2019", 9.99, None, "0 - 20000", "Cozy"),         # remise vide : gardé
+        game(4, "Trop récent", "Jan 10, 2026", 9.99, 0, "0 - 20000", "Indie"),          # < 6 mois
+        game(5, "Trop vieux", "May 5, 2010", 9.99, 0, "0 - 20000", "Indie"),            # avant 2015
+        game(6, "Sans tag", "May 5, 2018", 9.99, 0, "0 - 20000", None),                 # pas de tag
+    ]
+    return pd.DataFrame(games)
+
+
+def test_clean_games():
+    clean, report = clean_games(make_mini_raw())
+    assert list(clean["name"]) == ["Bon jeu", "Sans remise"]
+    assert len(clean.columns) == 10                          # contrat de données
+    bon_jeu = clean.iloc[0]
+    assert abs(bon_jeu["price"] - 10.0) < TOLERANCE          # 5 $ à -50 % -> prix plein 10 $
+    assert bon_jeu["tags"] == "Indie,Action"                 # espaces retirés
+    assert bon_jeu["owners_max"] == 50000
+    # Le rapport part de 7 lignes et finit à 2 : 5 lignes retirées au total.
+    assert report["lignes restantes"].iloc[0] == 7
+    assert report["lignes restantes"].iloc[-1] == 2
+    assert report["lignes retirées"].sum() == 5
 
 
 def test_estimate_sales():
@@ -95,6 +128,27 @@ def test_find_comparables():
     assert len(find_comparables(games, ["Indie", "Roguelike"], price=10)) == 2
     assert len(find_comparables(games, ["Indie", "Roguelike"], since_year=2022)) == 3
     assert len(find_comparables(games, ["Tag inexistant"])) == 0          # aucun comparable
+
+
+def test_niche_table():
+    games = make_mini_games()
+    niches = niche_table(games, min_games=1)
+    # Rogue-like : 5 jeux (Rogue A, B, C, Old Rogue, Zero), dont 1 rentable (Rogue A).
+    assert niches.loc["Rogue-like", "n_games"] == 5
+    assert abs(niches.loc["Rogue-like", "profitable_share"] - 0.2) < TOLERANCE
+    # Cozy : 1 seul jeu, rentable (113 400 $).
+    assert niches.loc["Cozy", "profitable_share"] == 1.0
+    # Avec le minimum par défaut (50 jeux), aucune niche du mini dataset n'est gardée.
+    assert niche_table(games).empty
+
+
+def test_promising_niches():
+    games = make_mini_games()
+    promising = promising_niches(niche_table(games, min_games=1))
+    # Cozy : 1 jeu rentable sur 1, sortie en 2022, aucune en 2023-2024 -> prometteuse.
+    assert "Cozy" in promising.index
+    # Rogue-like : seulement 20 % de jeux rentables (< 30 %) -> pas prometteuse.
+    assert "Rogue-like" not in promising.index
 
 
 def test_recommend_price():
@@ -149,8 +203,9 @@ def test_invalid_concepts():
 
 
 ALL_TESTS = [
-    test_cleaning_helpers, test_estimate_sales, test_net_revenue, test_add_estimates,
-    test_has_all_tags, test_find_comparables, test_recommend_price,
+    test_cleaning_helpers, test_clean_games, test_estimate_sales, test_net_revenue, test_add_estimates,
+    test_has_all_tags, test_find_comparables, test_niche_table, test_promising_niches,
+    test_recommend_price,
     test_break_even_probability, test_recommendation, test_game_concept, test_invalid_concepts,
 ]
 
