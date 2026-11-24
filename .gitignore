@@ -1,0 +1,10 @@
+# Données : trop lourdes pour GitHub (games.csv fait 400 Mo), à télécharger sur Kaggle
+data/
+
+# Clé API : ne jamais la publier
+.env
+
+# Fichiers générés par Python et Jupyter
+__pycache__/
+.ipynb_checkpoints/
+.gradio/

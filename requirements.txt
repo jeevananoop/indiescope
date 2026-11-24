@@ -1,0 +1,10 @@
+pandas
+numpy
+plotly
+gradio
+ipykernel
+nbformat
+nbconvert
+kaleido
+python-dotenv
+mirascope[anthropic]
