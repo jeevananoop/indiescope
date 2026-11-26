@@ -1,144 +1,144 @@
 # IndieScope
 
-**IndieScope dit à un studio de jeux indépendant si son jeu a des chances de rembourser son budget sur Steam**, à partir des résultats de plus de 70 000 jeux comparables.
+**IndieScope tells an independent game studio whether its game is likely to cover its budget on Steam**, based on the results of more than 70,000 comparable games.
 
-![Revenus des jeux comparables face au budget](docs/images/revenue_distribution.png)
+![The IndieScope app: Simulator tab](docs/images/app_simulator.png)
 
-<!-- Capture de l'appli : lancer python app.py, faire une capture de l'onglet Simulateur,
-     l'enregistrer dans docs/images/app_simulateur.png, puis remplacer l'image ci-dessus par :
-     ![L'appli IndieScope](docs/images/app_simulateur.png) -->
+## The problem
 
-## Le problème
-
-Plus de 20 000 jeux sortent chaque année sur Steam, et plus de la moitié reçoivent moins de 10 avis.
-Un développeur indépendant veut savoir, **avant** de dépenser son budget, si un jeu avec ses tags et son prix a des chances d'être rentable.
-IndieScope répond avec une fourchette de revenu, une probabilité de rembourser le budget, un verdict **GO / RISKY / NO-GO** et un prix conseillé.
+More than 20,000 games are released on Steam every year, and more than half of them get fewer than 10 reviews.
+An independent developer wants to know, **before** spending the budget, whether a game with these tags and this price is likely to be profitable.
+IndieScope answers with a revenue range, a probability of covering the budget, a **GO / RISKY / NO-GO** verdict and a recommended price.
 
 ## Installation
 
-1. Cloner le repo :
+1. Clone the repository:
    ```
-   git clone <url-du-repo>
+   git clone https://github.com/jeevananoop/indiescope.git
    cd indiescope
    ```
-2. Installer les bibliothèques (Python 3.10 ou plus) :
+2. Install the libraries (Python 3.10 or later):
    ```
    pip install -r requirements.txt
    ```
-3. Télécharger `games.csv` depuis Kaggle : [Steam Games Dataset (FronkonGames)](https://www.kaggle.com/datasets/fronkongames/steam-games-dataset), et le placer dans `data/games.csv`.
-4. (Optionnel, bonus IA) Copier `.env.example` en `.env` et y mettre une clé `ANTHROPIC_API_KEY`.
+3. Download `games.csv` from Kaggle: [Steam Games Dataset (FronkonGames)](https://www.kaggle.com/datasets/fronkongames/steam-games-dataset), and put it in `data/games.csv`.
+4. (Optional, AI bonus) Copy `.env.example` to `.env` and put an `ANTHROPIC_API_KEY` in it.
 
-## Utilisation
+## Usage
 
-Depuis la racine du projet :
-
-```
-python src/cleaning.py      # crée data/games_clean.csv (environ 30 secondes)
-python app.py               # lance l'appli sur http://127.0.0.1:7860
-```
-
-L'appli a 3 onglets :
-- **Simulateur** : cocher les tags, entrer le prix et le budget, cliquer sur « Évaluer » ;
-- **Carte du marché** : toutes les niches (tags), et les niches prometteuses ;
-- **Méthode** : d'où viennent les chiffres, et leurs limites.
-
-## Arborescence
+From the project root:
 
 ```
-├── app.py                    Interface Gradio (3 onglets)
-├── requirements.txt          Bibliothèques à installer
-├── .env.example              Modèle du fichier de clé API (bonus IA)
-├── data/                     Données (non publiées sur GitHub)
-│   ├── games.csv             Fichier brut Kaggle (à télécharger)
-│   └── games_clean.csv       Fichier propre, créé par src/cleaning.py
+python src/cleaning.py      # creates data/games_clean.csv (about 30 seconds)
+python app.py               # starts the app on http://127.0.0.1:7860
+```
+
+The app has 3 tabs:
+- **Simulator**: tick the tags, enter the price and the budget, click "Evaluate";
+- **Market map**: all the niches (tags), and the promising ones;
+- **Method**: where the figures come from, and their limits.
+
+## Project structure
+
+```
+├── app.py                    Gradio interface (3 tabs)
+├── requirements.txt          Libraries to install
+├── .env.example              Template of the API key file (AI bonus)
+├── data/                     Data (not published on GitHub)
+│   ├── games.csv             Raw Kaggle file (to download)
+│   └── games_clean.csv       Clean file, created by src/cleaning.py
 ├── src/
-│   ├── data_loader.py        Chargement de games.csv (corrige le décalage de colonnes)
-│   ├── cleaning.py           Nettoyage + rapport de qualité -> games_clean.csv
-│   ├── estimation.py         Ventes et revenu net estimés (3 scénarios)
-│   ├── analysis.py           Niches, jeux comparables, revenu par tranche de prix
-│   ├── simulator.py          Classe GameConcept : probabilité et verdict GO / RISKY / NO-GO
-│   ├── charts.py             Les 4 graphiques Plotly
-│   └── assistant.py          Bonus : avis rédigé par une IA (mirascope)
+│   ├── data_loader.py        Loads games.csv (fixes the column shift)
+│   ├── cleaning.py           Cleaning + quality report -> games_clean.csv
+│   ├── estimation.py         Estimated sales and net revenue (3 scenarios)
+│   ├── analysis.py           Niches, comparable games, revenue by price band
+│   ├── simulator.py          GameConcept class: probability and GO / RISKY / NO-GO verdict
+│   ├── charts.py             The 4 Plotly charts
+│   └── assistant.py          Bonus: advice written by an AI (mirascope)
 ├── notebooks/
-│   ├── 01_exploration.ipynb  Ce que contient le dataset
-│   ├── 02_cleaning.ipynb     Nettoyage et rapport de qualité
-│   ├── 03_estimation.ipynb   Estimation des ventes et validation de la méthode
-│   ├── 04_analysis.ipynb     Niches, comparables, prix
-│   ├── 05_simulator.ipynb    Le simulateur sur le fil rouge
-│   └── 06_charts.ipynb       Les graphiques
+│   ├── 01_exploration.ipynb  What the dataset contains
+│   ├── 02_cleaning.ipynb     Cleaning and quality report
+│   ├── 03_estimation.ipynb   Sales estimation and validation of the method
+│   ├── 04_analysis.ipynb     Niches, comparable games, prices
+│   ├── 05_simulator.ipynb    The simulator on the running example
+│   └── 06_charts.ipynb       The charts
 ├── tests/
-│   └── test_project.py       Tests automatiques (14 tests)
+│   └── test_project.py       Automated tests (14 tests)
 └── docs/
-    ├── cadrage.md            User story, contrat de données, hypothèses, limites
-    ├── guide_indiescope.md   Guide de réalisation du projet
-    └── images/               Graphiques exportés
+    ├── cadrage.md            Project framing: user story, data contract, assumptions, limitations
+    └── images/               Exported charts and app screenshot
 ```
 
-## Contrat de données (`data/games_clean.csv`)
+## Data contract (`data/games_clean.csv`)
 
-Une ligne par jeu payant, tagué, sorti entre 2015 et août 2025 (71 352 jeux).
+One row per paid, tagged game released between 2015 and August 2025 (71,352 games).
 
-| Colonne | Type | Signification |
+| Column | Type | Meaning |
 |---|---|---|
-| `app_id` | int | Identifiant Steam unique |
-| `name` | str | Nom du jeu |
-| `release_date` | date | Date de sortie |
-| `release_year` | int | Année de sortie (2015 ou après) |
-| `price` | float | Prix plein en dollars (> 0), hors promotion |
-| `positive` | int | Nombre d'avis positifs |
-| `negative` | int | Nombre d'avis négatifs |
-| `owners_min` | int | Borne basse des owners SteamSpy |
-| `owners_max` | int | Borne haute des owners SteamSpy |
-| `tags` | str | Tags séparés par une virgule, sans espace |
+| `app_id` | int | Unique Steam identifier |
+| `name` | str | Game name |
+| `release_date` | date | Release date |
+| `release_year` | int | Release year (2015 or later) |
+| `price` | float | Full price in dollars (> 0), excluding discounts |
+| `positive` | int | Number of positive reviews |
+| `negative` | int | Number of negative reviews |
+| `owners_min` | int | Lower bound of SteamSpy owners |
+| `owners_max` | int | Upper bound of SteamSpy owners |
+| `tags` | str | Tags separated by a comma, without spaces |
 
-Deux pièges du fichier brut sont corrigés :
-- l'en-tête a 39 noms pour 40 valeurs (`DiscountDLC count`), ce qui décale toutes les colonnes ;
-- `Price` est le prix **soldé** du jour de la collecte. On retrouve le prix plein avec `prix / (1 - remise / 100)`.
+Two traps of the raw file are fixed:
+- the header has 39 names for 40 values (`DiscountDLC count`), which shifts every column;
+- `Price` is the **discounted** price on the day of collection. The full price is recovered with `price / (1 - discount / 100)`.
 
-## Méthode et hypothèses
+## Method and assumptions
 
-Steam ne publie pas les ventes : on les estime à partir du nombre d'avis.
+Steam does not publish sales: we estimate them from the number of reviews.
 
-**Revenu net = avis × ventes par avis × prix × (1 − remboursements) × prix moyen payé × (1 − part de Steam)**
+**Net revenue = reviews × sales per review × price × (1 − refunds) × average price paid × (1 − Steam's share)**
 
-| Hypothèse | Valeur | Source / justification |
+| Assumption | Value | Source / justification |
 |---|---|---|
-| Ventes par avis (méthode Boxleiter) | 20 / 40 / 60 | Règle empirique de l'industrie, validée ci-dessous |
-| Part de Steam | 30 % | Commission standard de Steam |
-| Remboursements | 10 % | Ordre de grandeur (remboursement si < 2 h de jeu, < 14 jours) |
-| Prix moyen payé | 75 % du prix plein | Une grande partie des ventes se fait en soldes |
-| Jeux comparables | Tous les tags du concept, prix ± 50 %, sortis depuis 2020 | Un marché proche du concept et récent |
-| Verdict | GO ≥ 50 %, RISKY ≥ 25 %, sinon NO-GO | GO = au moins 1 jeu comparable sur 2 a remboursé ce budget |
+| Sales per review (Boxleiter method) | 20 / 40 / 60 | Industry rule of thumb, validated below |
+| Steam's share | 30 % | Standard Steam commission |
+| Refunds | 10 % | Order of magnitude (refund if < 2 h of play, < 14 days) |
+| Average price paid | 75 % of the full price | A large share of sales happens during Steam sales |
+| Comparable games | All the concept's tags, price ± 50 %, released since 2020 | A market close to the concept, and recent |
+| Verdict | GO ≥ 50 %, RISKY ≥ 25 %, otherwise NO-GO | GO = at least 1 comparable game in 2 covered this budget |
 
-**Validation** (`notebooks/03_estimation.ipynb`) :
-- notre estimation tombe dans la fourchette d'owners SteamSpy pour 14 % des jeux, et en dessous pour 83 %. Elle est donc prudente ;
-- pour 3 jeux aux ventes officielles, le chiffre officiel tombe entre nos scénarios bas et moyen :
-  - [Valheim](https://www.pcgamer.com/valheim-has-sold-over-10-million-copies) ;
-  - [Balatro](https://www.gematsu.com/2025/01/balatro-sales-top-five-million) ;
+**Validation** (`notebooks/03_estimation.ipynb`):
+- our estimate falls inside the SteamSpy owners range for 14 % of games, and below it for 83 %. It is therefore prudent;
+- for 3 games with official sales figures, the official figure falls between our low and mid scenarios:
+  - [Valheim](https://www.pcgamer.com/valheim-has-sold-over-10-million-copies);
+  - [Balatro](https://www.gematsu.com/2025/01/balatro-sales-top-five-million);
   - [Hollow Knight](https://www.avclub.com/hollow-knight-hits-all-time-peak-player-count-sells-15-million-copies).
 
-On utilise la **médiane**, pas la moyenne. Pour le tag Indie, le revenu moyen est de 278 000 $ et le revenu médian de 1 509 $ : quelques gros succès écrasent la moyenne.
+We use the **median**, not the mean. For the Indie tag, the mean revenue is $278,000 and the median revenue $1,509: a few big hits crush the mean.
 
-## Limites
+## Limitations
 
-- L'outil ne voit ni le marketing ni la qualité du jeu.
-- Les owners SteamSpy ne sont pas des ventes (clés offertes, bundles, week-ends gratuits).
-- Le ratio avis / ventes varie selon le genre et la taille du jeu.
-- Biais du survivant : les jeux retirés de Steam ne sont pas dans les données, donc les probabilités sont un peu optimistes.
-- Prix et revenu sont corrélés, mais un prix plus haut ne cause pas à lui seul un meilleur revenu (les jeux chers ont souvent plus de budget).
-- Les jeux free-to-play sont exclus.
-- Le dataset est une photo prise en mars 2026.
+- The tool sees neither marketing nor game quality.
+- SteamSpy owners are not sales (gifted keys, bundles, free weekends).
+- The reviews / sales ratio varies by genre and by game size.
+- Survivorship bias: games removed from Steam are not in the data, so the probabilities are slightly optimistic.
+- Price and revenue are correlated, but a higher price does not cause a better revenue on its own (expensive games often have bigger budgets).
+- Free-to-play games are excluded.
+- The dataset is a snapshot taken in March 2026.
 
 ## Tests
 
-Depuis la racine du projet :
+From the project root:
 
 ```
 python tests/test_project.py
 ```
 
-14 fonctions de test vérifient le nettoyage (fonctions et chaîne complète), l'estimation, les niches, les comparables, le prix conseillé, la probabilité, le verdict et les cas limites. Elles tournent sur un mini dataset inventé dont les résultats sont calculés à la main. La commande doit afficher « Tous les tests passent ».
+14 test functions check the cleaning (helper functions and the full pipeline), the estimation, the niches, the comparable games, the recommended price, the probability, the verdict and the edge cases. They run on a small made-up dataset whose results are computed by hand. The command must print "All tests pass".
 
-## Source des données
+## Data source
 
-[Steam Games Dataset](https://www.kaggle.com/datasets/fronkongames/steam-games-dataset), FronkonGames, Kaggle, licence MIT.
+[Steam Games Dataset](https://www.kaggle.com/datasets/fronkongames/steam-games-dataset), FronkonGames, Kaggle, MIT licence.
+
+## Team
+
+- **Jeevan**: sales and revenue estimation, price analysis, go / no-go simulator.
+- **Guillaume**: data collection and cleaning, niche comparison, refactoring and tests.

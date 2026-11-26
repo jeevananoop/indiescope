@@ -1,55 +1,54 @@
-"""Bonus : transforme le résultat du simulateur en un court avis rédigé par une IA.
+"""Bonus: turn the simulator result into a short piece of advice written by an AI.
 
-Utilise mirascope (cours 6). La clé API se lit dans les variables d'environnement
-ou dans un fichier .env (jamais dans le code). Sans clé, l'appli fonctionne sans l'IA.
+Uses mirascope (course 6). The API key is read from the environment variables
+or from a .env file (never from the code). Without a key, the app works without the AI.
 """
 
 import os
 
-# Modèle appelé ("fournisseur/modèle"). Modifiable sans toucher au code via la
-# variable d'environnement INDIESCOPE_MODEL (ex. "openai/gpt-4o-mini").
+# Model called ("provider/model"). It can be changed without touching the code
+# with the INDIESCOPE_MODEL environment variable (e.g. "openai/gpt-4o-mini").
 MODEL = os.environ.get("INDIESCOPE_MODEL", "anthropic/claude-sonnet-5-5")
 
-# Variable d'environnement qui doit contenir la clé, selon le fournisseur.
+# Environment variable that must hold the key, by provider.
 API_KEY_VARIABLES = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}
 
 SYSTEM_PROMPT = (
-    "Tu es un consultant qui conseille des fondateurs de petits studios de jeux vidéo indépendants. "
-    "On te donne les résultats chiffrés d'un simulateur de rentabilité sur Steam. "
-    "Rédige un avis de 4 à 5 phrases, en français, clair et direct. "
-    "Règles strictes : n'utilise QUE les chiffres fournis, n'invente aucun chiffre, aucun nom de jeu, "
-    "aucune statistique. Termine par une phrase qui rappelle une limite de la méthode "
-    "(ventes estimées à partir des avis, ni le marketing ni la qualité du jeu ne sont pris en compte)."
+    "You are a consultant who advises the founders of small independent video game studios. "
+    "You are given the figures produced by a profitability simulator for Steam. "
+    "Write a 4 to 5 sentence piece of advice, in English, clear and direct. "
+    "Strict rules: use ONLY the figures provided, do not invent any figure, any game name "
+    "or any statistic. End with a sentence that recalls a limitation of the method "
+    "(sales are estimated from reviews; neither marketing nor game quality is taken into account)."
 )
 
 
 def result_to_text(result):
-    """Transforme le dictionnaire renvoyé par GameConcept.evaluate en texte pour l'IA.
+    """Turn the dictionary returned by GameConcept.evaluate into text for the AI.
 
-    result : dict renvoyé par evaluate().
-    Renvoie une str de quelques lignes.
+    result: dict returned by evaluate().
+    Returns a str of a few lines.
     """
     p25, median, p75 = result["revenue_range"]
-    probas = result["probabilities"]
+    probabilities = result["probabilities"]
     return (
-        f"Tags du concept : {', '.join(result['tags'])}\n"
-        f"Prix prévu : {result['price']:.2f} $\n"
-        f"Budget du studio : {result['budget']:,.0f} $\n"
-        f"Nombre de jeux comparables : {result['n_comparables']}\n"
-        f"Revenu net des comparables (scénario moyen) : 25e percentile {p25:,.0f} $, "
-        f"médiane {median:,.0f} $, 75e percentile {p75:,.0f} $\n"
-        f"Probabilité de rembourser le budget : scénario bas {probas['low']:.0%}, "
-        f"moyen {probas['mid']:.0%}, haut {probas['high']:.0%}\n"
-        f"Verdict : {result['recommendation']}\n"
-        f"Tranche de prix conseillée : {result['recommended_price'] or 'non déterminée'}\n"
-        f"Avertissement : {result['warning'] or 'aucun'}"
+        f"Concept tags: {', '.join(result['tags'])}\n"
+        f"Planned price: ${result['price']:.2f}\n"
+        f"Studio budget: ${result['budget']:,.0f}\n"
+        f"Number of comparable games: {result['n_comparables']}\n"
+        f"Net revenue of comparable games (mid scenario): 25th percentile ${p25:,.0f}, "
+        f"median ${median:,.0f}, 75th percentile ${p75:,.0f}\n"
+        f"Probability of covering the budget: low scenario {probabilities['low']:.0%}, "
+        f"mid {probabilities['mid']:.0%}, high {probabilities['high']:.0%}\n"
+        f"Verdict: {result['recommendation']}\n"
+        f"Recommended price band: {result['recommended_price'] or 'not determined'}\n"
+        f"Warning: {result['warning'] or 'none'}"
     )
 
 
 def api_key_available(model=MODEL):
-    """True si la clé API du fournisseur de model est définie (variable d'environnement ou fichier .env)."""
-    # Lit le fichier .env s'il existe. Si la bibliothèque python-dotenv n'est pas
-    # installée, on continue avec les seules variables d'environnement.
+    """True if the API key of the model's provider is set (environment variable or .env file)."""
+    # python-dotenv is optional: without it, only the environment variables are read.
     try:
         from dotenv import load_dotenv
         load_dotenv()
@@ -64,31 +63,31 @@ def api_key_available(model=MODEL):
 
 
 def explain_result(result, model=MODEL):
-    """Demande à l'IA un avis rédigé sur le résultat du simulateur.
+    """Ask the AI for written advice on the simulator result.
 
-    result : dict renvoyé par GameConcept.evaluate.
-    Renvoie le texte de l'avis (str), ou un message clair si l'IA n'est pas disponible.
-    L'appli doit marcher sans l'IA : on renvoie un message au lieu de planter.
+    result: dict returned by GameConcept.evaluate.
+    Returns the advice (str), or a clear message if the AI is not available.
+    The app must work without the AI: we return a message instead of crashing.
     """
     if not api_key_available(model):
-        return ("ℹ️ L'explication par l'IA n'est pas disponible : aucune clé API trouvée. "
-                "Ajoutez ANTHROPIC_API_KEY dans un fichier .env pour l'activer.")
+        return ("ℹ️ The AI explanation is not available: no API key found. "
+                "Add ANTHROPIC_API_KEY to a .env file to enable it.")
     try:
         from mirascope import llm
     except ImportError:
-        return "ℹ️ L'explication par l'IA demande la bibliothèque mirascope (pip install mirascope)."
+        return "ℹ️ The AI explanation needs the mirascope library (pip install mirascope)."
 
-    # Même syntaxe que le cours sur mirascope : une fonction décorée par @llm.call
-    # qui renvoie le message système et le message utilisateur.
+    # Same syntax as the mirascope course: a function decorated with @llm.call
+    # that returns the system message and the user message.
     @llm.call(model)
     def advise(results_text: str):
         return [
             llm.messages.system(SYSTEM_PROMPT),
-            llm.messages.user(f"Résultats du simulateur :\n{results_text}"),
+            llm.messages.user(f"Simulator results:\n{results_text}"),
         ]
 
     try:
         return advise(result_to_text(result)).text()
     except Exception:
-        # Réseau coupé, clé refusée, quota dépassé... : on prévient sans planter.
-        return "⚠️ L'IA n'a pas pu répondre. Les résultats ci-dessus restent valables."
+        # Network down, key refused, quota exceeded...: warn without crashing.
+        return "⚠️ The AI could not answer. The results above are still valid."
