@@ -47,15 +47,20 @@ def result_to_text(result):
 
 
 def api_key_available(model=MODEL):
-    """True si la clé API du fournisseur de model est définie (variable d'environnement ou .env)."""
+    """True si la clé API du fournisseur de model est définie (variable d'environnement ou fichier .env)."""
+    # Lit le fichier .env s'il existe. Si la bibliothèque python-dotenv n'est pas
+    # installée, on continue avec les seules variables d'environnement.
     try:
         from dotenv import load_dotenv
-        load_dotenv()  # lit le fichier .env s'il existe ; ne fait rien sinon
+        load_dotenv()
     except ImportError:
         pass
-    provider = model.split("/")[0]
+
+    provider = model.split("/")[0]          # "anthropic/claude-..." -> "anthropic"
     variable = API_KEY_VARIABLES.get(provider)
-    return bool(variable and os.environ.get(variable))
+    if variable is None:
+        return False
+    return os.environ.get(variable, "") != ""
 
 
 def explain_result(result, model=MODEL):
@@ -63,7 +68,7 @@ def explain_result(result, model=MODEL):
 
     result : dict renvoyé par GameConcept.evaluate.
     Renvoie le texte de l'avis (str), ou un message clair si l'IA n'est pas disponible.
-    Ne lève jamais d'exception : l'appli doit marcher sans l'IA.
+    L'appli doit marcher sans l'IA : on renvoie un message au lieu de planter.
     """
     if not api_key_available(model):
         return ("ℹ️ L'explication par l'IA n'est pas disponible : aucune clé API trouvée. "
@@ -73,12 +78,17 @@ def explain_result(result, model=MODEL):
     except ImportError:
         return "ℹ️ L'explication par l'IA demande la bibliothèque mirascope (pip install mirascope)."
 
+    # Même syntaxe que le cours sur mirascope : une fonction décorée par @llm.call
+    # qui renvoie le message système et le message utilisateur.
     @llm.call(model)
     def advise(results_text: str):
-        return [llm.messages.system(SYSTEM_PROMPT),
-                llm.messages.user(f"Résultats du simulateur :\n{results_text}")]
+        return [
+            llm.messages.system(SYSTEM_PROMPT),
+            llm.messages.user(f"Résultats du simulateur :\n{results_text}"),
+        ]
 
     try:
         return advise(result_to_text(result)).text()
-    except Exception as error:  # réseau, clé refusée, quota... : on prévient sans planter
-        return f"⚠️ L'IA n'a pas pu répondre ({type(error).__name__}). Les résultats ci-dessus restent valables."
+    except Exception:
+        # Réseau coupé, clé refusée, quota dépassé... : on prévient sans planter.
+        return "⚠️ L'IA n'a pas pu répondre. Les résultats ci-dessus restent valables."
