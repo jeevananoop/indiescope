@@ -9,7 +9,7 @@ If I enter the tags Indie and Roguelike, a price of $15 and a budget of $50,000,
 - the probability of covering my budget;
 - a verdict: GO, RISKY or NO-GO.
 
-## Running example (fil rouge)
+## Running example
 A 2-person studio with a **$60,000 budget** hesitates between two concepts sold at **$15**:
 - **A**: a roguelike (tags Indie + Roguelike);
 - **B**: a cozy game (tags Indie + Cozy).
@@ -58,7 +58,7 @@ Produced by `clean_games()` in `src/cleaning.py`. One row per paid, tagged game 
 | Start year | 2015 | Before that, Steam was curated and released < 2,500 games/year |
 | Minimum age of a game | 6 months | Reviews take time to come in |
 
-### Validation of the multiplier (step 6) and decision
+### Validation of the multiplier and decision
 - **SteamSpy**: on the 18,950 games with at least 20,000 owners, `sales_mid` falls inside the SteamSpy owners range for 14 % of games, below it for 83 %, above it for 3 %. The median owners/review ratio is 245, but it is biased by small games (cheap games get bundled and given away). For games with 1,000-10,000 reviews the ratio is 72, and 48 above 10,000 reviews. Since owners ≥ sales, 40-60 sales per review remains plausible.
 - **Known games** (official figures vs our Steam-only estimate):
 

@@ -1,7 +1,7 @@
-"""Graphiques Plotly d'IndieScope.
+"""IndieScope Plotly charts.
 
-Chaque fonction prend des données et RENVOIE une figure (sans l'afficher),
-avec un titre qui énonce la conclusion, pas seulement la mesure.
+Each function takes data and RETURNS a figure (without showing it),
+with a title that states the conclusion, not just the measure.
 """
 
 import math
@@ -11,11 +11,11 @@ import plotly.graph_objects as go
 
 from src.analysis import MIN_GAMES_PER_PRICE_BAND, find_comparables, price_table
 
-# Nombre d'années sur lequel on mesure la tendance des sorties d'une niche.
+# Number of years over which the release trend of a niche is measured.
 TREND_YEARS = 5
 
-# Une seule couleur neutre par défaut ; une couleur vive seulement pour ce
-# qui doit sauter aux yeux (niche choisie, meilleure tranche, budget).
+# One neutral colour by default; a bright colour only for what must stand
+# out (chosen niche, best price band, budget).
 NEUTRAL = "#a3a29b"
 HIGHLIGHT = "#2a78d6"
 BUDGET_COLOR = "#eb6834"
@@ -23,55 +23,52 @@ TEMPLATE = "plotly_white"
 
 
 def format_dollars(value):
-    """12345.6 -> "12 346 $" (espace comme séparateur de milliers)."""
-    # :,.0f écrit 12345.6 en "12,346" ; on remplace la virgule par une espace.
-    return f"{value:,.0f} $".replace(",", " ")
+    """12345.6 -> "$12,346"."""
+    return f"${value:,.0f}"
 
 
 def log10_position(value):
-    """Position d'une valeur sur un axe logarithmique de Plotly.
+    """Position of a value on a Plotly logarithmic axis.
 
-    Sur un axe log, Plotly place les annotations avec le log10 de la valeur.
-    max(value, 1e-9) évite le log de 0, qui n'existe pas.
+    On a log axis, Plotly places annotations using the log10 of the value.
+    max(value, 1e-9) avoids the log of 0, which does not exist.
     """
     return math.log10(max(value, 1e-9))
 
 
 def niche_map(niches, highlight=None):
-    """Carte des niches : concurrence (x) contre revenu médian (y), un point par tag.
+    """Niche map: competition (x) against median revenue (y), one point per tag.
 
-    niches : DataFrame renvoyé par niche_table (index = tag).
-    highlight : liste de tags à mettre en avant (ex. la niche du fil rouge).
-    Renvoie une figure Plotly.
+    niches: DataFrame returned by niche_table (index = tag).
+    highlight: list of tags to highlight (e.g. the niches of the running example).
+    Returns a Plotly figure.
     """
     if highlight is None:
         highlight = []
-    data = niches.reset_index()  # le tag redevient une colonne normale
+    data = niches.reset_index()
 
-    # Chaque tag est soit dans la niche étudiée, soit dans les autres tags.
     groups = []
     for tag in data["tag"]:
         if tag in highlight:
-            groups.append("Niche étudiée")
+            groups.append("Studied niche")
         else:
-            groups.append("Autres tags")
-    data["groupe"] = groups
-    data["part rentable (%)"] = (100 * data["profitable_share"]).round(0)
+            groups.append("Other tags")
+    data["group"] = groups
+    data["profitable share (%)"] = (100 * data["profitable_share"]).round(0)
 
     fig = px.scatter(
-        data, x="n_games", y="median_revenue", color="groupe",
-        color_discrete_map={"Autres tags": NEUTRAL, "Niche étudiée": HIGHLIGHT},
-        hover_name="tag", hover_data={"groupe": False, "part rentable (%)": True},
+        data, x="n_games", y="median_revenue", color="group",
+        color_discrete_map={"Other tags": NEUTRAL, "Studied niche": HIGHLIGHT},
+        hover_name="tag", hover_data={"group": False, "profitable share (%)": True},
         log_x=True, log_y=True, template=TEMPLATE,
-        labels={"n_games": "Nombre de jeux sur le tag (concurrence)",
-                "median_revenue": "Revenu net médian par jeu ($)", "groupe": ""},
-        title="Les niches les plus rentables sont souvent les moins encombrées (en haut à gauche)",
+        labels={"n_games": "Number of games with the tag (competition)",
+                "median_revenue": "Median net revenue per game ($)", "group": ""},
+        title="The most profitable niches are often the least crowded (top left)",
     )
     fig.update_traces(marker={"size": 8, "opacity": 0.8})
-    fig.update_xaxes(dtick=1)  # sur un axe log : une graduation par puissance de 10
+    fig.update_xaxes(dtick=1)  # on a log axis: one tick per power of 10
     fig.update_yaxes(dtick=1)
 
-    # Le nom de chaque niche étudiée est écrit à côté de son point.
     for tag in highlight:
         if tag in list(data["tag"]):
             row = data[data["tag"] == tag].iloc[0]
@@ -80,24 +77,24 @@ def niche_map(niches, highlight=None):
     return fig
 
 
-def price_chart(prices, niche_name="cette niche"):
-    """Revenu net médian par tranche de prix, meilleure tranche en couleur.
+def price_chart(prices, niche_name="this niche"):
+    """Median net revenue by price band, with the best band in colour.
 
-    prices : DataFrame renvoyé par price_table (index = tranche de prix).
-    niche_name : nom de la niche, pour le titre.
-    Renvoie une figure Plotly.
+    prices: DataFrame returned by price_table (index = price band).
+    niche_name: name of the niche, for the title.
+    Returns a Plotly figure.
     """
     data = prices.reset_index()
     data["price_band"] = data["price_band"].astype(str)
 
-    # Meilleure tranche : même règle que recommend_price (une tranche trop peu remplie ne peut pas gagner).
+    # Best band: same rule as recommend_price (a band with too few games cannot win).
     eligible = data[data["n_games"] >= MIN_GAMES_PER_PRICE_BAND]
     best = None
     if len(eligible) > 0:
         best_index = eligible["median_revenue"].idxmax()
         best = eligible.loc[best_index, "price_band"]
 
-    # Apparence de chaque barre. Tranches trop peu remplies : pâles et hachurées.
+    # Bands with too few games are pale and hatched, so they are not read as reliable.
     colors = []
     opacities = []
     patterns = []
@@ -112,13 +109,13 @@ def price_chart(prices, niche_name="cette niche"):
         if too_few:
             opacities.append(0.45)
             patterns.append("/")
-            texts.append(f"{row['n_games']:.0f} jeux (trop peu)")
+            texts.append(f"{row['n_games']:.0f} games (too few)")
         else:
             opacities.append(1)
             patterns.append("")
-            texts.append(f"{row['n_games']:.0f} jeux")
-        hover_texts.append(f"{row['price_band']}<br>Revenu médian : {row['median_revenue']:,.0f} $"
-                           f"<br>{row['n_games']:.0f} jeux")
+            texts.append(f"{row['n_games']:.0f} games")
+        hover_texts.append(f"{row['price_band']}<br>Median revenue: {format_dollars(row['median_revenue'])}"
+                           f"<br>{row['n_games']:.0f} games")
 
     fig = go.Figure(go.Bar(
         x=data["price_band"], y=data["median_revenue"],
@@ -127,25 +124,24 @@ def price_chart(prices, niche_name="cette niche"):
         hovertext=hover_texts, hoverinfo="text",
     ))
     if best is None:
-        title = f"Dans {niche_name}, aucune tranche de prix n'a assez de jeux pour conclure"
+        title = f"{niche_name}: no price band has enough games to conclude"
     else:
-        title = f"Dans {niche_name}, les jeux à {best} rapportent le plus (revenu médian)"
+        title = f"{niche_name}: games at {best} earn the most"
     fig.update_layout(
         template=TEMPLATE,
         title=title,
-        xaxis_title="Tranche de prix", yaxis_title="Revenu net médian par jeu ($)",
+        xaxis_title="Price band", yaxis_title="Median net revenue per game ($)",
     )
     return fig
 
 
 def revenue_distribution(comparables, budget):
-    """Distribution du revenu des jeux comparables, avec une ligne au niveau du budget.
+    """Revenue distribution of the comparable games, with a line at the budget level.
 
-    comparables : DataFrame enrichi par add_estimates.
-    budget : budget du studio en dollars.
-    Renvoie une figure Plotly.
+    comparables: DataFrame enriched by add_estimates.
+    budget: studio budget in dollars.
+    Returns a Plotly figure.
     """
-    # Part des comparables qui dépassent le budget (moyenne de True/False).
     if len(comparables) > 0:
         share = (comparables["revenue_mid"] >= budget).mean()
     else:
@@ -154,57 +150,51 @@ def revenue_distribution(comparables, budget):
     fig = px.box(
         comparables, y="revenue_mid", points="all", hover_name="name",
         log_y=True, template=TEMPLATE, color_discrete_sequence=[NEUTRAL],
-        labels={"revenue_mid": "Revenu net estimé par jeu ($, échelle log)"},
-        title=f"{share:.0%} des {len(comparables)} jeux comparables dépassent votre budget",
+        labels={"revenue_mid": "Estimated net revenue per game ($, log scale)"},
+        title=f"{share:.0%} of the {len(comparables)} comparable games exceed your budget",
     )
-    # Points posés sur la boîte (pointpos=0) et un peu écartés (jitter) pour ne pas se cacher.
+    # Points drawn on the box (pointpos=0) and spread out (jitter) so they do not hide each other.
     fig.update_traces(marker={"size": 5, "opacity": 0.5}, jitter=0.6, pointpos=0)
-    fig.update_layout(boxgap=0.5)  # boîte plus étroite
+    fig.update_layout(boxgap=0.5)
 
-    # Ligne horizontale au niveau du budget, et son étiquette à droite.
     fig.add_hline(y=budget, line_color=BUDGET_COLOR, line_width=2)
     fig.add_annotation(x=1, xref="paper", xanchor="right", y=log10_position(budget), yanchor="bottom",
-                       text=f"Votre budget : {format_dollars(budget)}", showarrow=False,
+                       text=f"Your budget: {format_dollars(budget)}", showarrow=False,
                        font={"color": BUDGET_COLOR})
     fig.update_yaxes(dtick=1)
     return fig
 
 
 def releases_per_year(df, tags):
-    """Nombre de jeux sortis par an dans la niche définie par tags.
+    """Number of games released per year in the niche defined by tags.
 
-    df : DataFrame enrichi (ou propre) avec tags et release_year.
-    tags : liste de tags de la niche.
-    Renvoie une figure Plotly.
+    df: enriched (or clean) DataFrame with tags and release_year.
+    tags: list of tags of the niche.
+    Returns a Plotly figure.
     """
     niche = find_comparables(df, tags)
     per_year = niche["release_year"].value_counts().sort_index().reset_index()
     per_year.columns = ["release_year", "n_games"]
 
-    # La dernière année est incomplète (dataset arrêté 6 mois avant mars 2026) : on la retire.
+    # The last year is incomplete (dataset stops 6 months before March 2026): drop it.
     last_year = df["release_year"].max()
     per_year = per_year[per_year["release_year"] < last_year]
 
     niche_name = " + ".join(tags)
     if len(per_year) > TREND_YEARS:
-        # On compare à TREND_YEARS ans plus tôt : la toute première année a souvent
-        # 1 ou 2 jeux, ce qui donnerait un ratio spectaculaire mais trompeur.
+        # Compare with TREND_YEARS years earlier: the very first year often has
+        # 1 or 2 games, which would give a spectacular but misleading ratio.
         first = per_year.iloc[-1 - TREND_YEARS]
         last = per_year.iloc[-1]
         ratio = last["n_games"] / max(first["n_games"], 1)
-        title = (f"Niche {niche_name} : {ratio:.1f} fois plus de sorties "
-                 f"en {last['release_year']} qu'en {first['release_year']}")
+        title = (f"{niche_name} niche: {ratio:.1f} times more releases "
+                 f"in {last['release_year']} than in {first['release_year']}")
     else:
-        title = f"Niche {niche_name} : trop peu de jeux pour voir une tendance"
+        title = f"{niche_name} niche: too few games to see a trend"
 
     fig = px.line(per_year, x="release_year", y="n_games", markers=True, template=TEMPLATE,
                   color_discrete_sequence=[HIGHLIGHT], title=title,
-                  labels={"release_year": "Année de sortie", "n_games": "Nombre de jeux sortis"})
+                  labels={"release_year": "Release year", "n_games": "Number of games released"})
     fig.update_traces(line_width=2, marker_size=8)
     return fig
 
-
-def niche_price_chart(df, tags):
-    """Raccourci : price_chart sur les comparables d'une liste de tags."""
-    comparables = find_comparables(df, tags)
-    return price_chart(price_table(comparables), niche_name=" + ".join(tags))

@@ -1,8 +1,8 @@
-"""Nettoyage du dataset Steam : games.csv brut -> data/games_clean.csv.
+"""Clean the Steam dataset: raw games.csv -> data/games_clean.csv.
 
-Chaque filtre est une petite fonction. clean_games() les appelle l'une après
-l'autre et construit un rapport de qualité (combien de jeux chaque filtre retire).
-Lancer `python src/cleaning.py` depuis la racine du projet régénère games_clean.csv.
+Each filter is a small function. clean_games() calls them one after the other
+and builds a quality report (how many games each filter removes).
+Run `python src/cleaning.py` from the project root to rebuild games_clean.csv.
 """
 
 import os
@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
-# Colonnes du fichier brut à garder, et leur nouveau nom.
+# Columns of the raw file to keep, and their new name.
 RAW_TO_CLEAN = {
     "AppID": "app_id",
     "Name": "name",
@@ -23,28 +23,28 @@ RAW_TO_CLEAN = {
     "Tags": "tags",
 }
 
-# Les 10 colonnes du fichier final, dans l'ordre.
+# The 10 columns of the final file, in order.
 CLEAN_COLUMNS = [
     "app_id", "name", "release_date", "release_year", "price",
     "positive", "negative", "owners_min", "owners_max", "tags",
 ]
 
-# Format des dates dans le fichier brut : "Aug 1, 2023".
+# Date format in the raw file: "Aug 1, 2023".
 DATE_FORMAT = "%b %d, %Y"
 
-# Date de collecte du dataset : les sorties s'arrêtent début mars 2026.
+# Collection date of the dataset: releases stop in early March 2026.
 SNAPSHOT_DATE = datetime(2026, 3, 1)
 
-# Un jeu récent n'a pas encore reçu ses avis : on attend 6 mois (183 jours).
+# A recent game has not received its reviews yet: we wait 6 months (183 days).
 MIN_AGE_DAYS = 183
 
-# Avant 2015, Steam publiait moins de 2 500 jeux par an : ce marché ne
-# ressemble pas à celui d'aujourd'hui (20 000 sorties par an).
+# Before 2015, Steam released fewer than 2,500 games a year: that market
+# does not look like today's (20,000 releases a year).
 START_YEAR = 2015
 
 
 def select_and_rename(df):
-    """Garde les colonnes utiles et leur donne un nom simple."""
+    """Keep the useful columns and give them a simple name."""
     columns_to_keep = list(RAW_TO_CLEAN.keys())
     df = df[columns_to_keep]
     df = df.rename(columns=RAW_TO_CLEAN)
@@ -52,10 +52,10 @@ def select_and_rename(df):
 
 
 def drop_duplicates_and_unnamed(df):
-    """Retire les doublons d'AppID et les jeux sans nom.
+    """Remove duplicate AppIDs and games without a name.
 
-    On dédoublonne sur app_id (l'identifiant Steam) et pas sur le nom,
-    car deux jeux différents peuvent avoir le même nom (ex. "Solitaire").
+    We remove duplicates on app_id (the Steam identifier) and not on the name,
+    because two different games can share a name (e.g. "Solitaire").
     """
     df = df.drop_duplicates(subset="app_id")
     df = df[df["name"].notna()]
@@ -64,15 +64,14 @@ def drop_duplicates_and_unnamed(df):
 
 
 def restore_full_price(df):
-    """Remplace le prix soldé par le prix plein.
+    """Replace the discounted price with the full price.
 
-    La colonne Price est le prix du jour de la collecte, remise comprise
-    (Hollow Knight : 7,49 $ à -50 %, pour un prix plein de 14,99 $).
-    Prix plein = prix / (1 - remise / 100).
-    - Remise vide : on la lit comme 0 %.
-    - Remise de 100 % : le prix plein est impossible à retrouver, on retire le jeu.
+    The Price column is the price on the day of collection, discount included
+    (Hollow Knight: $7.49 at -50 %, for a full price of $14.99).
+    Full price = price / (1 - discount / 100).
+    - Empty discount: read as 0 %.
+    - 100 % discount: the full price cannot be recovered, so the game is removed.
     """
-    # .copy() : on travaille sur une copie pour ne pas modifier le tableau d'origine.
     df = df.copy()
     df["discount"] = df["discount"].fillna(0)
     df = df[df["discount"] < 100].copy()
@@ -83,21 +82,21 @@ def restore_full_price(df):
 
 
 def drop_free_games(df):
-    """Retire les jeux gratuits : sans prix, pas de revenu de vente à estimer."""
+    """Remove free games: without a price, there is no sales revenue to estimate."""
     return df[df["price"] > 0]
 
 
 def parse_date(text):
-    """Transforme "Aug 1, 2023" en date, ou renvoie None si c'est illisible."""
+    """Turn "Aug 1, 2023" into a date, or return None if it cannot be read."""
     try:
         return datetime.strptime(text.strip(), DATE_FORMAT)
     except (ValueError, AttributeError):
-        # ValueError : format différent. AttributeError : case vide.
+        # ValueError: another format. AttributeError: empty cell.
         return None
 
 
 def add_release_date(df):
-    """Convertit release_date en vraie date, ajoute release_year et retire les dates illisibles."""
+    """Convert release_date to a real date, add release_year and remove unreadable dates."""
     df = df.copy()
     df["release_date"] = df["release_date"].apply(parse_date)
     df = df[df["release_date"].notna()].copy()
@@ -107,7 +106,7 @@ def add_release_date(df):
 
 
 def parse_owners(text):
-    """Transforme "20000 - 50000" en (20000, 50000), ou (None, None) si c'est illisible."""
+    """Turn "20000 - 50000" into (20000, 50000), or (None, None) if it cannot be read."""
     try:
         low, high = text.split(" - ")
         return int(low), int(high)
@@ -116,7 +115,7 @@ def parse_owners(text):
 
 
 def add_owners_range(df):
-    """Découpe owners en deux colonnes, owners_min et owners_max, et retire les cases illisibles."""
+    """Split owners into two columns, owners_min and owners_max, and remove unreadable cells."""
     owners_min = []
     owners_max = []
     for text in df["owners"]:
@@ -135,9 +134,9 @@ def add_owners_range(df):
 
 
 def clean_tag_string(text):
-    """Nettoie une chaîne de tags : " Indie , Action,," -> "Indie,Action".
+    """Clean a tag string: " Indie , Action,," -> "Indie,Action".
 
-    Renvoie None si la case est vide ou ne contient aucun tag.
+    Returns None if the cell is empty or contains no tag.
     """
     if not isinstance(text, str):
         return None
@@ -152,7 +151,7 @@ def clean_tag_string(text):
 
 
 def normalize_tags(df):
-    """Nettoie les tags et retire les jeux sans tag (impossibles à comparer à un concept)."""
+    """Clean the tags and remove games without a tag (they cannot be compared to a concept)."""
     df = df.copy()
     df["tags"] = df["tags"].apply(clean_tag_string)
     df = df[df["tags"].notna()]
@@ -160,84 +159,83 @@ def normalize_tags(df):
 
 
 def drop_recent_games(df):
-    """Retire les jeux sortis moins de 6 mois avant la date de collecte.
+    """Remove games released less than 6 months before the collection date.
 
-    Retire aussi les sorties annoncées (dates dans le futur).
+    This also removes announced releases (dates in the future).
     """
     cutoff = SNAPSHOT_DATE - timedelta(days=MIN_AGE_DAYS)
     return df[df["release_date"] <= cutoff]
 
 
 def drop_old_games(df):
-    """Retire les jeux sortis avant START_YEAR."""
+    """Remove games released before START_YEAR."""
     return df[df["release_year"] >= START_YEAR]
 
 
 def add_report_line(report_rows, step, df, reason):
-    """Ajoute une ligne au rapport de qualité : nom de l'étape, lignes restantes, raison."""
-    report_rows.append({"étape": step, "lignes restantes": len(df), "raison": reason})
+    """Add a line to the quality report: step name, rows left, reason."""
+    report_rows.append({"step": step, "rows left": len(df), "reason": reason})
 
 
 def clean_games(df):
-    """Applique toutes les étapes de nettoyage et mesure ce que chacune retire.
+    """Apply every cleaning step and measure what each one removes.
 
-    Renvoie deux DataFrames :
-    - df_clean : les jeux nettoyés (les 10 colonnes de CLEAN_COLUMNS) ;
-    - report : le rapport de qualité (une ligne par étape).
-    L'ordre compte : la date doit être convertie avant les filtres sur l'âge et l'année.
+    Returns two DataFrames:
+    - df_clean: the cleaned games (the 10 columns of CLEAN_COLUMNS);
+    - report: the quality report (one line per step).
+    Order matters: the date must be converted before the age and year filters.
     """
     report_rows = []
-    add_report_line(report_rows, "Départ (fichier brut)", df, "")
+    add_report_line(report_rows, "Start (raw file)", df, "")
 
     df = select_and_rename(df)
-    add_report_line(report_rows, "Colonnes du contrat", df, "Garder les colonnes utiles, renommées en snake_case")
+    add_report_line(report_rows, "Contract columns", df, "Keep the useful columns, renamed in snake_case")
 
     df = drop_duplicates_and_unnamed(df)
-    add_report_line(report_rows, "Doublons et sans nom", df, "Un jeu compté deux fois fausse les statistiques")
+    add_report_line(report_rows, "Duplicates and unnamed", df, "A game counted twice distorts the statistics")
 
     df = restore_full_price(df)
-    add_report_line(report_rows, "Remise de 100 %", df, "Prix plein impossible à retrouver (le prix soldé est corrigé)")
+    add_report_line(report_rows, "100 % discount", df, "Full price cannot be recovered (other discounted prices are fixed)")
 
     df = drop_free_games(df)
-    add_report_line(report_rows, "Jeux gratuits", df, "Sans prix, pas de revenu de vente à estimer")
+    add_report_line(report_rows, "Free games", df, "No price, so no sales revenue to estimate")
 
     df = add_release_date(df)
-    add_report_line(report_rows, "Dates illisibles", df, "Impossible de situer le jeu dans le temps")
+    add_report_line(report_rows, "Unreadable dates", df, "The game cannot be placed in time")
 
     df = add_owners_range(df)
-    add_report_line(report_rows, "Owners illisibles", df, "Impossible de valider l'estimation des ventes")
+    add_report_line(report_rows, "Unreadable owners", df, "The sales estimate cannot be checked")
 
     df = normalize_tags(df)
-    add_report_line(report_rows, "Jeux sans tag", df, "Impossible de les comparer à un concept")
+    add_report_line(report_rows, "Games without tags", df, "They cannot be compared to a concept")
 
     df = drop_recent_games(df)
-    add_report_line(report_rows, "Sortis il y a moins de 6 mois", df, "Leurs avis n'ont pas eu le temps d'arriver")
+    add_report_line(report_rows, "Released less than 6 months ago", df, "Their reviews have not had time to come in")
 
     df = drop_old_games(df)
-    add_report_line(report_rows, "Sortis avant 2015", df, "Le marché d'avant 2015 ne ressemble pas à celui d'aujourd'hui")
+    add_report_line(report_rows, "Released before 2015", df, "The pre-2015 market does not look like today's")
 
-    # Pour chaque étape : lignes retirées = lignes restantes avant - lignes restantes après.
-    n_raw = report_rows[0]["lignes restantes"]
+    n_raw = report_rows[0]["rows left"]
     rows_before = n_raw
     for row in report_rows:
-        row["lignes retirées"] = rows_before - row["lignes restantes"]
-        row["% du brut retiré"] = round(100 * row["lignes retirées"] / n_raw, 1)
-        rows_before = row["lignes restantes"]
+        row["rows removed"] = rows_before - row["rows left"]
+        row["% of raw removed"] = round(100 * row["rows removed"] / n_raw, 1)
+        rows_before = row["rows left"]
 
     report = pd.DataFrame(report_rows)
-    report = report[["étape", "lignes retirées", "% du brut retiré", "lignes restantes", "raison"]]
+    report = report[["step", "rows removed", "% of raw removed", "rows left", "reason"]]
 
     df_clean = df[CLEAN_COLUMNS].reset_index(drop=True)
     return df_clean, report
 
 
 def load_clean(path):
-    """Recharge games_clean.csv en relisant release_date comme une date."""
+    """Reload games_clean.csv, reading release_date back as a date."""
     return pd.read_csv(path, parse_dates=["release_date"])
 
 
 if __name__ == "__main__":
-    # À lancer depuis la racine du projet : python src/cleaning.py
+    # Run from the project root: python src/cleaning.py
     from data_loader import load_games
 
     raw = load_games(os.path.join("data", "games.csv"), usecols=list(RAW_TO_CLEAN.keys()))
@@ -245,4 +243,4 @@ if __name__ == "__main__":
     out_path = os.path.join("data", "games_clean.csv")
     clean.to_csv(out_path, index=False)
     print(quality.to_string(index=False))
-    print(f"\n{len(clean)} jeux enregistrés dans {out_path}")
+    print(f"\n{len(clean)} games saved to {out_path}")
