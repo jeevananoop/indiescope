@@ -16,8 +16,7 @@ from src.cleaning import load_clean
 from src.estimation import add_estimates
 from src.simulator import GameConcept
 
-PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
-CLEAN_PATH = os.path.join(PROJECT_DIR, "data", "games_clean.csv")
+CLEAN_PATH = os.path.join("data", "games_clean.csv")
 
 # Nombre de tags proposés à cocher : les plus fréquents suffisent.
 N_TAGS_OFFERED = 40
@@ -38,12 +37,18 @@ SCENARIO_NAMES = {"low": "Bas (20 ventes/avis)", "mid": "Moyen (40 ventes/avis)"
 if not os.path.exists(CLEAN_PATH):
     raise SystemExit("data/games_clean.csv introuvable : lancez d'abord  python src/cleaning.py")
 GAMES = add_estimates(load_clean(CLEAN_PATH))
-TAG_CHOICES = sorted(set(explode_tags(GAMES)["tag"].value_counts().head(N_TAGS_OFFERED).index)
-                     | set(DEFAULT_TAGS) | {"Rogue-like"})
+
+# Tags proposés à cocher : les plus fréquents, plus ceux du fil rouge, par ordre alphabétique.
+TAG_CHOICES = list(explode_tags(GAMES)["tag"].value_counts().head(N_TAGS_OFFERED).index)
+for tag in DEFAULT_TAGS + HIGHLIGHTED_NICHES:
+    if tag not in TAG_CHOICES:
+        TAG_CHOICES.append(tag)
+TAG_CHOICES.sort()
 
 
 def dollars(value):
     """12345.6 -> "12 346 $"."""
+    # :,.0f écrit 12345.6 en "12,346" ; on remplace la virgule par une espace.
     return f"{value:,.0f} $".replace(",", " ")
 
 
@@ -65,14 +70,21 @@ def evaluate_concept(tags, price, budget):
                f"{result['probabilities']['mid']:.0%} des jeux comparables ont remboursé {dollars(budget)}")
 
     p25, median, p75 = result["revenue_range"]
+    recommended_price = result["recommended_price"]
+    if recommended_price is None:
+        recommended_price = "non déterminé (trop peu de jeux)"
+    low_price = price * (1 - PRICE_TOLERANCE)
+    high_price = price * (1 + PRICE_TOLERANCE)
+
+    # Texte affiché sous le verdict, en Markdown : une ligne par élément de la liste.
     lines = [
         f"**{result['n_comparables']} jeux comparables** (tags : {', '.join(tags)} ; prix entre "
-        f"{price * (1 - PRICE_TOLERANCE):.2f} $ et {price * (1 + PRICE_TOLERANCE):.2f} $).",
+        f"{low_price:.2f} $ et {high_price:.2f} $).",
         "",
         f"**Fourchette de revenu net** (scénario moyen) : {dollars(p25)} à {dollars(p75)}, "
         f"médiane {dollars(median)}.",
         "",
-        f"**Prix conseillé** : {result['recommended_price'] or 'non déterminé (trop peu de jeux)'}",
+        f"**Prix conseillé** : {recommended_price}",
         "",
         "| Scénario | Probabilité de rembourser le budget | Verdict |",
         "|---|---|---|",
@@ -80,12 +92,14 @@ def evaluate_concept(tags, price, budget):
     for scenario, name in SCENARIO_NAMES.items():
         lines.append(f"| {name} | {result['probabilities'][scenario]:.0%} | "
                      f"{result['recommendations'][scenario]} |")
-    if result["warning"]:
-        lines += ["", f"⚠️ **{result['warning']}**"]
+    if result["warning"] is not None:
+        lines.append("")
+        lines.append(f"⚠️ **{result['warning']}**")
 
-    return (verdict, "\n".join(lines),
-            revenue_distribution(concept.comparables, budget),
-            price_chart(price_table(concept.niche), niche_name=" + ".join(tags)))
+    details = "\n".join(lines)
+    distribution_figure = revenue_distribution(concept.comparables, budget)
+    price_figure = price_chart(price_table(concept.niche), niche_name=" + ".join(tags))
+    return verdict, details, distribution_figure, price_figure
 
 
 def explain_concept(tags, price, budget):

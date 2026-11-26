@@ -67,7 +67,7 @@ L'appli a 3 onglets :
 │   ├── 05_simulator.ipynb    Le simulateur sur le fil rouge
 │   └── 06_charts.ipynb       Les graphiques
 ├── tests/
-│   └── test_project.py       Tests automatiques (11 tests)
+│   └── test_project.py       Tests automatiques (14 tests)
 └── docs/
     ├── cadrage.md            User story, contrat de données, hypothèses, limites
     ├── guide_indiescope.md   Guide de réalisation du projet
@@ -137,7 +137,7 @@ Depuis la racine du projet :
 python tests/test_project.py
 ```
 
-11 fonctions de test vérifient le nettoyage, l'estimation, les comparables, le prix conseillé, la probabilité, le verdict et les cas limites. Elles tournent sur un mini dataset inventé dont les résultats sont calculés à la main. La commande doit afficher « Tous les tests passent ».
+14 fonctions de test vérifient le nettoyage (fonctions et chaîne complète), l'estimation, les niches, les comparables, le prix conseillé, la probabilité, le verdict et les cas limites. Elles tournent sur un mini dataset inventé dont les résultats sont calculés à la main. La commande doit afficher « Tous les tests passent ».
 
 ## Source des données
 

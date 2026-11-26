@@ -22,7 +22,8 @@ REFUND_RATE = 0.10
 # se fait pendant les soldes. On retient une remise moyenne de 25 %.
 PRICE_PAID_RATIO = 0.75
 
-SCENARIOS = list(SALES_PER_REVIEW)
+# Les 3 scénarios, du plus prudent au plus optimiste.
+SCENARIOS = ["low", "mid", "high"]
 
 
 def estimate_sales(n_reviews, scenario="mid"):

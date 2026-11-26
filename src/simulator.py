@@ -18,9 +18,6 @@ RISKY_THRESHOLD = 0.25
 # sauf si ce filtre laisse moins de MIN_COMPARABLES jeux.
 RECENT_SINCE_YEAR = 2020
 
-# Percentiles de la fourchette de revenu affichée (pessimiste, typique, optimiste).
-REVENUE_PERCENTILES = (0.25, 0.50, 0.75)
-
 
 def break_even_probability(comparables, budget, scenario="mid"):
     """Part des jeux comparables dont le revenu net dépasse le budget.
@@ -56,8 +53,11 @@ def revenue_range(comparables, scenario="mid"):
     """
     if len(comparables) == 0:
         return (0.0, 0.0, 0.0)
-    quantiles = comparables[f"revenue_{scenario}"].quantile(list(REVENUE_PERCENTILES))
-    return tuple(float(value) for value in quantiles)
+    revenues = comparables[f"revenue_{scenario}"]
+    p25 = float(revenues.quantile(0.25))     # cas pessimiste : 1 jeu sur 4 fait moins
+    median = float(revenues.quantile(0.50))  # cas typique
+    p75 = float(revenues.quantile(0.75))     # cas optimiste : 1 jeu sur 4 fait plus
+    return (p25, median, p75)
 
 
 class GameConcept:
@@ -103,8 +103,15 @@ class GameConcept:
         # sont cherchés dans la niche, ce qui évite de reparcourir tout le marché.
         niche = find_comparables(df, self.tags)
         comparables = self.find_comparables(niche)
-        self.niche, self.comparables = niche, comparables
-        probabilities = {s: break_even_probability(comparables, self.budget, s) for s in SCENARIOS}
+        self.niche = niche
+        self.comparables = comparables
+
+        # Une probabilité et un verdict par scénario (bas, moyen, haut).
+        probabilities = {}
+        recommendations = {}
+        for scenario in SCENARIOS:
+            probabilities[scenario] = break_even_probability(comparables, self.budget, scenario)
+            recommendations[scenario] = recommendation(probabilities[scenario])
 
         warning = None
         if len(comparables) == 0:
@@ -127,7 +134,7 @@ class GameConcept:
             "revenue_range": revenue_range(comparables),
             "probabilities": probabilities,
             "recommendation": verdict,
-            "recommendations": {s: recommendation(p) for s, p in probabilities.items()},
+            "recommendations": recommendations,
             "recommended_price": recommend_price(niche),
             "warning": warning,
         }
@@ -138,10 +145,15 @@ class GameConcept:
         if self.result is None:
             return "Concept pas encore évalué : appelez evaluate(df) d'abord."
         r = self.result
-        budget = f"{r['budget']:,.0f}".replace(",", " ")  # 60000 -> "60 000"
-        text = (f"{r['n_comparables']} jeux comparables, {r['probabilities']['mid']:.0%} ont remboursé "
-                f"{budget} $ : {r['recommendation']}. "
-                f"Prix conseillé : {r['recommended_price'] or 'non déterminé'}.")
-        if r["warning"]:
+        # :,.0f écrit 60000 en "60,000" ; on remplace la virgule par une espace -> "60 000".
+        budget = f"{r['budget']:,.0f}".replace(",", " ")
+        # :.0% écrit 0.4 en "40%".
+        probability = f"{r['probabilities']['mid']:.0%}"
+        price = r["recommended_price"]
+        if price is None:
+            price = "non déterminé"
+        text = (f"{r['n_comparables']} jeux comparables, {probability} ont remboursé "
+                f"{budget} $ : {r['recommendation']}. Prix conseillé : {price}.")
+        if r["warning"] is not None:
             text += f" Attention : {r['warning']}"
         return text

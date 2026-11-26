@@ -32,18 +32,10 @@ def load_games(path, usecols=None):
     La correction : ignorer l'en-tête du fichier (header=0 + names=...)
     et donner nous-mêmes la liste des 40 noms, sans colonne d'index.
 
-    Paramètres
-    ----------
-    path : str
-        Chemin vers games.csv.
-    usecols : list of str, optional
-        Colonnes à garder (None = toutes). Charger moins de colonnes
-        économise beaucoup de mémoire sur un fichier de 400 Mo.
-
-    Renvoie
-    -------
-    pandas.DataFrame
-        Une ligne par jeu, avec des colonnes aux bons noms.
+    path : chemin vers games.csv.
+    usecols : liste des colonnes à garder (None = toutes). Charger moins de
+    colonnes économise beaucoup de mémoire sur un fichier de 400 Mo.
+    Renvoie un DataFrame : une ligne par jeu, avec des colonnes aux bons noms.
     """
     return pd.read_csv(
         path,
