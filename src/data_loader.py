@@ -1,13 +1,13 @@
-"""Chargement du fichier brut games.csv (Steam Games Dataset, FronkonGames).
+"""Load the raw games.csv file (Steam Games Dataset, FronkonGames).
 
-Ce module corrige le décalage de colonnes du fichier source et renvoie
-un DataFrame pandas dont chaque nom de colonne correspond à son contenu.
+This module fixes the column shift in the source file and returns a pandas
+DataFrame in which every column name matches its content.
 """
 
 import pandas as pd
 
-# Liste des 40 vrais noms de colonnes. L'en-tête du fichier n'en contient
-# que 39, car "Discount" et "DLC count" y sont collés en "DiscountDLC count".
+# The 40 real column names. The file header only has 39, because "Discount"
+# and "DLC count" are glued together as "DiscountDLC count".
 COLUMN_NAMES = [
     "AppID", "Name", "Release date", "Estimated owners", "Peak CCU",
     "Required age", "Price", "Discount", "DLC count", "About the game",
@@ -22,33 +22,25 @@ COLUMN_NAMES = [
 
 
 def load_games(path, usecols=None):
-    """Charge games.csv en corrigeant le décalage de colonnes.
+    """Load games.csv and fix the column shift.
 
-    Le problème : l'en-tête du fichier a 39 noms, mais chaque ligne a
-    40 valeurs ("Discount" et "DLC count" sont fusionnés en un seul nom).
-    Avec un simple pd.read_csv, pandas prend alors la 1re valeur (AppID)
-    comme index, et chaque nom se retrouve au-dessus de la colonne
-    suivante : "Name" contient la date, "Price" contient la remise, etc.
-    La correction : ignorer l'en-tête du fichier (header=0 + names=...)
-    et donner nous-mêmes la liste des 40 noms, sans colonne d'index.
+    The problem: the header has 39 names, but every row has 40 values
+    ("Discount" and "DLC count" are merged into one name). With a plain
+    pd.read_csv, pandas then uses the 1st value (AppID) as the index, and
+    every name ends up above the next column: "Name" holds the date,
+    "Price" holds the discount, and so on.
+    The fix: skip the file header (header=0 + names=...) and pass the
+    40 names ourselves, with no index column.
 
-    Paramètres
-    ----------
-    path : str
-        Chemin vers games.csv.
-    usecols : list of str, optional
-        Colonnes à garder (None = toutes). Charger moins de colonnes
-        économise beaucoup de mémoire sur un fichier de 400 Mo.
-
-    Renvoie
-    -------
-    pandas.DataFrame
-        Une ligne par jeu, avec des colonnes aux bons noms.
+    path: path to games.csv.
+    usecols: list of columns to keep (None = all). Loading fewer columns
+    saves a lot of memory on a 400 MB file.
+    Returns a DataFrame: one row per game, with correctly named columns.
     """
     return pd.read_csv(
         path,
-        header=0,             # la 1re ligne est l'en-tête faux : on la saute
-        names=COLUMN_NAMES,   # et on la remplace par les 40 bons noms
-        index_col=False,      # aucune colonne ne doit servir d'index
+        header=0,             # the 1st line is the wrong header: skip it
+        names=COLUMN_NAMES,   # and replace it with the 40 correct names
+        index_col=False,      # no column must be used as the index
         usecols=usecols,
     )

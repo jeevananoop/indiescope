@@ -1,34 +1,31 @@
-"""Simulateur go / no-go : un concept de jeu -> probabilité de rembourser son budget.
+"""Go / no-go simulator: a game concept -> probability of covering its budget.
 
-La classe GameConcept regroupe les données d'un concept (tags, prix, budget) ;
-toute la logique reste dans les fonctions des modules estimation et analysis.
+The GameConcept class holds the data of a concept (tags, price, budget);
+all the logic stays in the functions of the estimation and analysis modules.
 """
 
 from src.analysis import MIN_COMPARABLES, find_comparables, recommend_price
 from src.estimation import SCENARIOS
 
-# Seuils de recommandation, du plus haut au plus bas.
-# GO : au moins 1 jeu comparable sur 2 a remboursé ce budget (pile ou face favorable).
-# RISKY : entre 1 sur 4 et 1 sur 2 : faisable, mais un échec est probable.
-# NO-GO : moins d'1 jeu sur 4 : le budget est trop élevé pour cette niche.
+# Recommendation thresholds, from highest to lowest.
+# GO: at least 1 comparable game in 2 covered this budget (a favourable coin toss).
+# RISKY: between 1 in 4 and 1 in 2: doable, but a failure is likely.
+# NO-GO: fewer than 1 game in 4: the budget is too high for this niche.
 GO_THRESHOLD = 0.50
 RISKY_THRESHOLD = 0.25
 
-# Les comparables doivent être sortis après cette année (marché récent),
-# sauf si ce filtre laisse moins de MIN_COMPARABLES jeux.
+# Comparable games must be released after this year (recent market),
+# unless this filter leaves fewer than MIN_COMPARABLES games.
 RECENT_SINCE_YEAR = 2020
-
-# Percentiles de la fourchette de revenu affichée (pessimiste, typique, optimiste).
-REVENUE_PERCENTILES = (0.25, 0.50, 0.75)
 
 
 def break_even_probability(comparables, budget, scenario="mid"):
-    """Part des jeux comparables dont le revenu net dépasse le budget.
+    """Share of comparable games whose net revenue is above the budget.
 
-    comparables : DataFrame enrichi par add_estimates.
-    budget : float, budget du studio en dollars.
-    scenario : "low", "mid" ou "high".
-    Renvoie un float entre 0 et 1 (0.0 s'il n'y a aucun comparable).
+    comparables: DataFrame enriched by add_estimates.
+    budget: float, studio budget in dollars.
+    scenario: "low", "mid" or "high".
+    Returns a float between 0 and 1 (0.0 if there is no comparable game).
     """
     if len(comparables) == 0:
         return 0.0
@@ -36,10 +33,10 @@ def break_even_probability(comparables, budget, scenario="mid"):
 
 
 def recommendation(probability):
-    """Transforme une probabilité en verdict "GO", "RISKY" ou "NO-GO".
+    """Turn a probability into a "GO", "RISKY" or "NO-GO" verdict.
 
-    Les seuils sont testés du plus haut au plus bas : sinon tout tomberait
-    dans la première condition.
+    The thresholds are tested from highest to lowest: otherwise everything
+    would fall into the first condition.
     """
     if probability >= GO_THRESHOLD:
         return "GO"
@@ -50,72 +47,81 @@ def recommendation(probability):
 
 
 def revenue_range(comparables, scenario="mid"):
-    """Fourchette de revenu : 25e percentile, médiane, 75e percentile.
+    """Revenue range: 25th percentile, median, 75th percentile.
 
-    Renvoie un tuple de 3 floats, ou (0.0, 0.0, 0.0) sans comparable.
+    Returns a tuple of 3 floats, or (0.0, 0.0, 0.0) without comparable games.
     """
     if len(comparables) == 0:
         return (0.0, 0.0, 0.0)
-    quantiles = comparables[f"revenue_{scenario}"].quantile(list(REVENUE_PERCENTILES))
-    return tuple(float(value) for value in quantiles)
+    revenues = comparables[f"revenue_{scenario}"]
+    p25 = float(revenues.quantile(0.25))     # pessimistic case: 1 game in 4 earns less
+    median = float(revenues.quantile(0.50))  # typical case
+    p75 = float(revenues.quantile(0.75))     # optimistic case: 1 game in 4 earns more
+    return (p25, median, p75)
 
 
 class GameConcept:
-    """Un concept de jeu à évaluer : ses tags, son prix et le budget du studio."""
+    """A game concept to evaluate: its tags, its price and the studio's budget."""
 
     def __init__(self, tags, price, budget):
-        """Vérifie et stocke le concept.
+        """Check and store the concept.
 
-        tags : liste non vide de tags Steam (str).
-        price : prix de vente prévu en dollars (> 0).
-        budget : budget du studio en dollars (> 0).
-        Lève ValueError si une entrée est invalide.
+        tags: non-empty list of Steam tags (str).
+        price: planned selling price in dollars (> 0).
+        budget: studio budget in dollars (> 0).
+        Raises ValueError if an input is invalid.
         """
         if not tags:
-            raise ValueError("Choisissez au moins un tag.")
+            raise ValueError("Choose at least one tag.")
         if price is None or price <= 0:
-            raise ValueError("Le prix doit être strictement positif.")
+            raise ValueError("The price must be strictly positive.")
         if budget is None or budget <= 0:
-            raise ValueError("Le budget doit être strictement positif.")
+            raise ValueError("The budget must be strictly positive.")
         self.tags = list(tags)
         self.price = float(price)
         self.budget = float(budget)
         self.result = None
-        self.niche = None         # jeux avec les mêmes tags, rempli par evaluate
-        self.comparables = None   # niche filtrée par prix et année, rempli par evaluate
+        self.niche = None         # games with the same tags, filled by evaluate
+        self.comparables = None   # niche filtered by price and year, filled by evaluate
 
     def find_comparables(self, df):
-        """Comparables récents (même tags, prix ± 50 %), ou tous les ans si trop peu de jeux récents."""
+        """Recent comparable games (same tags, price ± 50 %), or all years if too few recent games."""
         recent = find_comparables(df, self.tags, price=self.price, since_year=RECENT_SINCE_YEAR)
         if len(recent) >= MIN_COMPARABLES:
             return recent
         return find_comparables(df, self.tags, price=self.price)
 
     def evaluate(self, df):
-        """Évalue le concept sur le marché df (DataFrame enrichi par add_estimates).
+        """Evaluate the concept on the market df (DataFrame enriched by add_estimates).
 
-        Renvoie un dictionnaire : tags, price, budget, n_comparables,
-        revenue_range (p25, médiane, p75 en scénario moyen), probabilities
-        (une par scénario), recommendation (scénario moyen), recommendations
-        (une par scénario), recommended_price, warning (str ou None).
+        Returns a dictionary: tags, price, budget, n_comparables,
+        revenue_range (p25, median, p75 in the mid scenario), probabilities
+        (one per scenario), recommendation (mid scenario), recommendations
+        (one per scenario), recommended_price, warning (str or None).
         """
-        # La niche (mêmes tags, tous prix) sert au prix conseillé ; les comparables
-        # sont cherchés dans la niche, ce qui évite de reparcourir tout le marché.
+        # The niche (same tags, any price) is used for the recommended price; the
+        # comparable games are searched inside the niche, to avoid scanning the whole market again.
         niche = find_comparables(df, self.tags)
         comparables = self.find_comparables(niche)
-        self.niche, self.comparables = niche, comparables
-        probabilities = {s: break_even_probability(comparables, self.budget, s) for s in SCENARIOS}
+        self.niche = niche
+        self.comparables = comparables
+
+        probabilities = {}
+        recommendations = {}
+        for scenario in SCENARIOS:
+            probabilities[scenario] = break_even_probability(comparables, self.budget, scenario)
+            recommendations[scenario] = recommendation(probabilities[scenario])
 
         warning = None
         if len(comparables) == 0:
-            warning = "Aucun jeu comparable : impossible d'évaluer ce concept."
+            warning = "No comparable game: this concept cannot be evaluated."
         elif len(comparables) < MIN_COMPARABLES:
-            warning = (f"Seulement {len(comparables)} jeux comparables (minimum conseillé : "
-                       f"{MIN_COMPARABLES}) : résultat peu fiable.")
+            warning = (f"Only {len(comparables)} comparable games (recommended minimum: "
+                       f"{MIN_COMPARABLES}): the result is not reliable.")
 
         verdict = recommendation(probabilities["mid"])
-        # Sans assez de preuves, on ne conseille jamais GO : 1 succès sur 1 jeu
-        # ne prouve rien. Le verdict est plafonné à RISKY.
+        # Without enough evidence, we never advise GO: 1 success out of 1 game
+        # proves nothing. The verdict is capped at RISKY.
         if len(comparables) < MIN_COMPARABLES and verdict == "GO":
             verdict = "RISKY"
 
@@ -127,21 +133,24 @@ class GameConcept:
             "revenue_range": revenue_range(comparables),
             "probabilities": probabilities,
             "recommendation": verdict,
-            "recommendations": {s: recommendation(p) for s, p in probabilities.items()},
+            "recommendations": recommendations,
             "recommended_price": recommend_price(niche),
             "warning": warning,
         }
         return self.result
 
     def summary(self):
-        """Renvoie une phrase lisible résumant la dernière évaluation."""
+        """Return a readable sentence summarising the last evaluation."""
         if self.result is None:
-            return "Concept pas encore évalué : appelez evaluate(df) d'abord."
+            return "Concept not evaluated yet: call evaluate(df) first."
         r = self.result
-        budget = f"{r['budget']:,.0f}".replace(",", " ")  # 60000 -> "60 000"
-        text = (f"{r['n_comparables']} jeux comparables, {r['probabilities']['mid']:.0%} ont remboursé "
-                f"{budget} $ : {r['recommendation']}. "
-                f"Prix conseillé : {r['recommended_price'] or 'non déterminé'}.")
-        if r["warning"]:
-            text += f" Attention : {r['warning']}"
+        budget = f"{r['budget']:,.0f}"
+        probability = f"{r['probabilities']['mid']:.0%}"
+        price = r["recommended_price"]
+        if price is None:
+            price = "not determined"
+        text = (f"{r['n_comparables']} comparable games, {probability} covered "
+                f"${budget}: {r['recommendation']}. Recommended price: {price}.")
+        if r["warning"] is not None:
+            text += f" Warning: {r['warning']}"
         return text

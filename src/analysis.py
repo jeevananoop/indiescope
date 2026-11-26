@@ -1,65 +1,63 @@
-"""Analyse du marché : niches (tags), jeux comparables et revenu par tranche de prix.
+"""Market analysis: niches (tags), comparable games and revenue by price band.
 
-Toutes les fonctions prennent un DataFrame enrichi par add_estimates()
-(colonnes tags, price, release_year, revenue_low/mid/high).
+All functions take a DataFrame enriched by add_estimates()
+(columns tags, price, release_year, revenue_low/mid/high).
 """
-
-from itertools import combinations
 
 import pandas as pd
 
-# Un jeu est « rentable » au-delà de 100 000 $ de revenu net : de quoi payer
-# environ un an de travail pour une petite équipe indé.
-PROFITABLE_THRESHOLD = 100_000
+# A game is "profitable" above $100,000 of net revenue: enough to pay
+# about one year of work for a small indie team.
+PROFITABLE_THRESHOLD = 100000
 
-# En dessous de 50 jeux, la médiane d'un tag varie trop d'un jeu à l'autre.
+# Below 50 games, the median of a tag varies too much from one game to the next.
 MIN_GAMES_PER_NICHE = 50
 
-# Dynamique : on compare les sorties des 2 dernières années complètes
-# (2023-2024) aux 2 précédentes (2021-2022). 2025 est incomplète
-# (le dataset s'arrête 6 mois avant mars 2026).
+# Momentum: we compare the releases of the last 2 complete years
+# (2023-2024) with the 2 previous ones (2021-2022). 2025 is incomplete
+# (the dataset stops 6 months before March 2026).
 RECENT_YEARS = [2023, 2024]
 PREVIOUS_YEARS = [2021, 2022]
 
-# Un comparable doit avoir un prix à ± 50 % du prix du concept.
+# A comparable game must have a price within ± 50 % of the concept's price.
 PRICE_TOLERANCE = 0.5
 
-# En dessous de 30 comparables, les pourcentages ne sont plus fiables
-# (un seul jeu pèse plus de 3 points) : l'outil affiche un avertissement.
+# Below 30 comparable games, percentages are no longer reliable
+# (a single game weighs more than 3 points): the tool shows a warning.
 MIN_COMPARABLES = 30
 
-# Tranches de prix (en dollars) et leurs noms.
+# Price bands (in dollars) and their names.
 PRICE_BINS = [0, 5, 10, 15, 20, 30, float("inf")]
 PRICE_LABELS = ["<5$", "5-10$", "10-15$", "15-20$", "20-30$", "30$+"]
 
-# Une tranche de prix doit contenir au moins 10 jeux pour être recommandée.
+# A price band needs at least 10 games to be recommended.
 MIN_GAMES_PER_PRICE_BAND = 10
 
-# Tags qui décrivent un financement, une licence ou un succès passé (donnés
-# APRÈS le succès), pas un concept qu'un studio peut choisir.
+# Tags that describe funding, a licence or past success (given AFTER the
+# success), not a concept a studio can choose.
 META_TAGS = ["Games Workshop", "Kickstarter", "Crowdfunded", "Mod", "Moddable", "Cult Classic",
              "Great Soundtrack", "Classic", "Remake", "Sequel", "Epic", "Masterpiece",
              "Mature", "Hentai", "NSFW", "Sexual Content", "Nudity", "Dwarf"]
 
-# Critères d'une niche prometteuse : concurrence limitée, au moins 30 % de
-# jeux rentables, et des sorties qui n'ont pas doublé en 2 ans.
+# Criteria of a promising niche: limited competition, at least 30 % of
+# profitable games, and releases that have not doubled in 2 years.
 PROMISING_MAX_GAMES = 1000
 PROMISING_MIN_PROFITABLE_SHARE = 0.30
 PROMISING_MAX_GROWTH = 1.0
 
 
 def split_tags(tag_string):
-    """Découpe "Indie,Action" en liste ["Indie", "Action"] (liste vide si case vide)."""
+    """Split "Indie,Action" into the list ["Indie", "Action"] (empty list if the cell is empty)."""
     if not isinstance(tag_string, str):
         return []
     return tag_string.split(",")
 
 
 def count_tags_loop(df):
-    """Compte le nombre de jeux par tag avec une boucle et un dictionnaire.
+    """Count the number of games per tag with a loop and a dictionary.
 
-    Version « à la main » (cours 4, problem 1), pour vérifier la version pandas.
-    Renvoie un dict {tag: nombre de jeux}.
+    Hand-written version (course 4, problem 1), used to check the pandas version.
+    Returns a dict {tag: number of games}.
     """
     counts = {}
     for tag_string in df["tags"]:
@@ -69,145 +67,188 @@ def count_tags_loop(df):
 
 
 def explode_tags(df):
-    """Renvoie un DataFrame avec une ligne par couple (jeu, tag), dans la colonne tag."""
-    exploded = df.assign(tag=df["tags"].str.split(",")).explode("tag")
+    """Return a DataFrame with one row per (game, tag) pair, in the tag column.
+
+    A game with 3 tags becomes 3 rows, one per tag.
+    """
+    exploded = df.copy()
+    exploded["tag"] = exploded["tags"].str.split(",")
+    exploded = exploded.explode("tag")
     return exploded
 
 
 def niche_table(df, min_games=MIN_GAMES_PER_NICHE, threshold=PROFITABLE_THRESHOLD):
-    """Résume chaque niche (tag) : concurrence, revenu médian, part de jeux rentables, dynamique.
+    """Summarise each niche (tag): competition, median revenue, share of profitable games, momentum.
 
-    df : DataFrame enrichi par add_estimates.
-    min_games : nombre minimum de jeux pour garder un tag.
-    threshold : revenu net (scénario moyen) au-delà duquel un jeu est rentable.
-    Renvoie un DataFrame indexé par tag, trié par revenu médian décroissant,
-    avec les colonnes n_games, median_revenue, mean_revenue, profitable_share,
-    recent_releases, previous_releases, growth.
+    df: DataFrame enriched by add_estimates.
+    min_games: minimum number of games to keep a tag.
+    threshold: net revenue (mid scenario) above which a game is profitable.
+    Returns a DataFrame indexed by tag, sorted by decreasing median revenue.
     """
     games = explode_tags(df)
     games["profitable"] = games["revenue_mid"] >= threshold
     games["recent"] = games["release_year"].isin(RECENT_YEARS)
     games["previous"] = games["release_year"].isin(PREVIOUS_YEARS)
 
-    table = games.groupby("tag").agg(
-        n_games=("app_id", "count"),
-        median_revenue=("revenue_mid", "median"),
-        mean_revenue=("revenue_mid", "mean"),
-        profitable_share=("profitable", "mean"),
-        recent_releases=("recent", "sum"),
-        previous_releases=("previous", "sum"),
-    )
-    table = table[table["n_games"] >= min_games]
-    # Croissance des sorties : +0.5 = 50 % de jeux en plus sur les 2 dernières années.
-    table["growth"] = table["recent_releases"] / table["previous_releases"].clip(lower=1) - 1
+    groups = games.groupby("tag")
+    table = pd.DataFrame()
+    table["n_games"] = groups["app_id"].count()
+    table["median_revenue"] = groups["revenue_mid"].median()
+    table["mean_revenue"] = groups["revenue_mid"].mean()
+    table["profitable_share"] = groups["profitable"].mean()  # mean of True/False = share of True
+    table["recent_releases"] = groups["recent"].sum()
+    table["previous_releases"] = groups["previous"].sum()
+
+    table = table[table["n_games"] >= min_games].copy()
+
+    # Release growth: 0.5 = 50 % more games over the last 2 years.
+    # 0 is replaced by 1 in the denominator to avoid dividing by zero.
+    previous = table["previous_releases"].replace(0, 1)
+    table["growth"] = table["recent_releases"] / previous - 1
     return table.sort_values("median_revenue", ascending=False)
 
 
 def promising_niches(niches):
-    """Filtre un tableau de niche_table pour ne garder que les niches prometteuses.
+    """Filter a niche_table result to keep only the promising niches.
 
-    Retire les META_TAGS, puis garde les tags peu encombrés, souvent rentables
-    et qui ne se remplissent pas trop vite. Renvoie un DataFrame trié par revenu médian.
+    Removes the META_TAGS, then keeps the tags that are not crowded, often
+    profitable and not filling up too fast. Returns a DataFrame sorted by median revenue.
     """
-    genres = niches.drop(index=[tag for tag in META_TAGS if tag in niches.index])
-    return genres[(genres["n_games"] <= PROMISING_MAX_GAMES)
-                  & (genres["profitable_share"] >= PROMISING_MIN_PROFITABLE_SHARE)
-                  & (genres["growth"] < PROMISING_MAX_GROWTH)]
+    meta_tags_present = []
+    for tag in META_TAGS:
+        if tag in niches.index:
+            meta_tags_present.append(tag)
+    genres = niches.drop(index=meta_tags_present)
+
+    genres = genres[genres["n_games"] <= PROMISING_MAX_GAMES]
+    genres = genres[genres["profitable_share"] >= PROMISING_MIN_PROFITABLE_SHARE]
+    genres = genres[genres["growth"] < PROMISING_MAX_GROWTH]
+    return genres
 
 
 def tag_pair_table(df, min_games=MIN_GAMES_PER_NICHE, threshold=PROFITABLE_THRESHOLD,
                    top_tags=60):
-    """Même analyse que niche_table, mais sur les paires de tags (ex. Roguelike + Deckbuilding).
+    """Same analysis as niche_table, but on pairs of tags (e.g. Roguelike + Deckbuilding).
 
-    Pour limiter le calcul, on ne combine que les top_tags tags les plus fréquents.
-    Renvoie un DataFrame indexé par paire "Tag A + Tag B".
+    To limit the computation, only the top_tags most frequent tags are combined.
+    Returns a DataFrame indexed by the pair "Tag A + Tag B".
     """
-    frequent = set(pd.Series(count_tags_loop(df)).nlargest(top_tags).index)
+    tag_counts = pd.Series(count_tags_loop(df))
+    frequent = list(tag_counts.nlargest(top_tags).index)
+
     rows = []
-    for tag_string, revenue in zip(df["tags"], df["revenue_mid"]):
-        tags = sorted(set(split_tags(tag_string)) & frequent)
-        for tag_a, tag_b in combinations(tags, 2):
-            rows.append((f"{tag_a} + {tag_b}", revenue))
+    for index, game in df.iterrows():
+        # Sorted, so that "A + B" and "B + A" are counted as the same pair.
+        game_tags = []
+        for tag in split_tags(game["tags"]):
+            if tag in frequent and tag not in game_tags:
+                game_tags.append(tag)
+        game_tags.sort()
+
+        for i in range(len(game_tags)):
+            for j in range(i + 1, len(game_tags)):
+                pair = f"{game_tags[i]} + {game_tags[j]}"
+                rows.append({"pair": pair, "revenue_mid": game["revenue_mid"]})
+
     pairs = pd.DataFrame(rows, columns=["pair", "revenue_mid"])
     pairs["profitable"] = pairs["revenue_mid"] >= threshold
-    table = pairs.groupby("pair").agg(
-        n_games=("revenue_mid", "count"),
-        median_revenue=("revenue_mid", "median"),
-        profitable_share=("profitable", "mean"),
-    )
+
+    groups = pairs.groupby("pair")
+    table = pd.DataFrame()
+    table["n_games"] = groups["revenue_mid"].count()
+    table["median_revenue"] = groups["revenue_mid"].median()
+    table["profitable_share"] = groups["profitable"].mean()
+
     table = table[table["n_games"] >= min_games]
     return table.sort_values("median_revenue", ascending=False)
 
 
 def normalize_tag(tag):
-    """Met un tag sous une forme comparable : "Rogue-like " -> "roguelike".
+    """Put a tag in a comparable form: "Rogue-like " -> "roguelike".
 
-    Steam écrit "Rogue-like" alors qu'un utilisateur tapera "Roguelike" :
-    on ignore donc la casse, les espaces autour et les tirets.
+    Steam writes "Rogue-like" while a user will type "Roguelike":
+    so we ignore case, surrounding spaces and hyphens.
     """
     return tag.strip().lower().replace("-", "")
 
 
 def has_all_tags(game_tags, wanted_tags):
-    """Renvoie True si le jeu a tous les tags demandés (sans tenir compte de la casse ni des tirets).
+    """Return True if the game has every wanted tag (ignoring case and hyphens).
 
-    game_tags : str "Indie,Action" ou liste de tags du jeu.
-    wanted_tags : liste de tags recherchés. Une liste vide renvoie True.
+    game_tags: str "Indie,Action" or list of the game's tags.
+    wanted_tags: list of wanted tags. An empty list returns True.
     """
     if isinstance(game_tags, str) or game_tags is None:
         game_tags = split_tags(game_tags)
-    game_set = {normalize_tag(tag) for tag in game_tags}
-    wanted_set = {normalize_tag(tag) for tag in wanted_tags}
-    return wanted_set <= game_set
+
+    normalized_game_tags = []
+    for tag in game_tags:
+        normalized_game_tags.append(normalize_tag(tag))
+
+    for tag in wanted_tags:
+        if normalize_tag(tag) not in normalized_game_tags:
+            return False
+    return True
 
 
 def find_comparables(df, tags, price=None, since_year=None, price_tolerance=PRICE_TOLERANCE):
-    """Trouve les jeux comparables à un concept.
+    """Find the games comparable to a concept.
 
-    df : DataFrame enrichi par add_estimates.
-    tags : liste des tags que le jeu comparable doit tous avoir.
-    price : prix du concept ; si donné, on garde les jeux à ± price_tolerance.
-    since_year : si donné, on garde les jeux sortis cette année-là ou après.
-    Renvoie le sous-ensemble de df correspondant.
+    df: DataFrame enriched by add_estimates.
+    tags: list of tags that a comparable game must all have.
+    price: price of the concept; if given, keep the games within ± price_tolerance.
+    since_year: if given, keep the games released that year or later.
+    Returns the matching subset of df.
     """
-    # Les filtres rapides (prix, année) passent avant le filtre lent (tags, ligne par ligne).
     result = df
     if price is not None:
-        low, high = price * (1 - price_tolerance), price * (1 + price_tolerance)
-        result = result[result["price"].between(low, high)]
+        low = price * (1 - price_tolerance)
+        high = price * (1 + price_tolerance)
+        result = result[result["price"] >= low]
+        result = result[result["price"] <= high]
     if since_year is not None:
         result = result[result["release_year"] >= since_year]
-    return result[result["tags"].apply(has_all_tags, args=(tags,))]
+
+    # The tag filter comes last because it is the slowest (a Python loop).
+    keep = []
+    for game_tags in result["tags"]:
+        keep.append(has_all_tags(game_tags, tags))
+    return result[keep]
 
 
 def add_price_band(df):
-    """Ajoute la colonne price_band (tranche de prix) à une copie de df."""
+    """Add the price_band column to a copy of df.
+
+    pd.cut puts each price in its PRICE_BINS band (e.g. $12 -> "10-15$").
+    """
     df = df.copy()
     df["price_band"] = pd.cut(df["price"], bins=PRICE_BINS, labels=PRICE_LABELS)
     return df
 
 
 def price_table(comparables, threshold=PROFITABLE_THRESHOLD):
-    """Par tranche de prix : nombre de jeux, revenu médian et part de jeux rentables.
+    """By price band: number of games, median revenue and share of profitable games.
 
-    comparables : DataFrame (en général issu de find_comparables, sans filtre de prix).
-    Renvoie un DataFrame de 6 lignes, une par tranche de PRICE_LABELS.
+    comparables: DataFrame (usually from find_comparables, without a price filter).
+    Returns a DataFrame of 6 rows, one per band of PRICE_LABELS.
     """
     games = add_price_band(comparables)
     games["profitable"] = games["revenue_mid"] >= threshold
-    table = games.groupby("price_band", observed=False).agg(
-        n_games=("revenue_mid", "count"),
-        median_revenue=("revenue_mid", "median"),
-        profitable_share=("profitable", "mean"),
-    )
+
+    # observed=False keeps the empty bands too, so there are always 6 rows.
+    groups = games.groupby("price_band", observed=False)
+    table = pd.DataFrame()
+    table["n_games"] = groups["revenue_mid"].count()
+    table["median_revenue"] = groups["revenue_mid"].median()
+    table["profitable_share"] = groups["profitable"].mean()
     return table.fillna(0)
 
 
 def recommend_price(comparables, min_games=MIN_GAMES_PER_PRICE_BAND):
-    """Renvoie la tranche de prix au revenu médian le plus élevé.
+    """Return the price band with the highest median revenue.
 
-    Les tranches avec moins de min_games jeux sont ignorées.
-    Renvoie le nom de la tranche (str), ou None si aucune tranche n'a assez de jeux.
+    Bands with fewer than min_games games are ignored.
+    Returns the band name (str), or None if no band has enough games.
     """
     table = price_table(comparables)
     table = table[table["n_games"] >= min_games]

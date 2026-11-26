@@ -1,7 +1,7 @@
-"""IndieScope : interface Gradio (Carte du marché, Simulateur, Méthode).
+"""IndieScope: Gradio interface (Simulator, Market map, Method).
 
-Lancer depuis la racine du projet : python app.py
-Prérequis : data/games_clean.csv (le créer avec : python src/cleaning.py).
+Run from the project root: python app.py
+Requires data/games_clean.csv (create it with: python src/cleaning.py).
 """
 
 import os
@@ -11,44 +11,43 @@ import gradio as gr
 from src.analysis import (MIN_GAMES_PER_NICHE, PRICE_TOLERANCE, explode_tags, niche_table,
                           price_table, promising_niches)
 from src.assistant import explain_result
-from src.charts import niche_map, price_chart, revenue_distribution
+from src.charts import format_dollars, niche_map, price_chart, revenue_distribution
 from src.cleaning import load_clean
 from src.estimation import add_estimates
 from src.simulator import GameConcept
 
-PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
-CLEAN_PATH = os.path.join(PROJECT_DIR, "data", "games_clean.csv")
+CLEAN_PATH = os.path.join("data", "games_clean.csv")
 
-# Nombre de tags proposés à cocher : les plus fréquents suffisent.
+# Number of tags offered as checkboxes: the most frequent ones are enough.
 N_TAGS_OFFERED = 40
 
-# Fil rouge, pré-rempli pour que la démo commence en un clic.
+# Running example, pre-filled so the demo starts in one click.
 DEFAULT_TAGS = ["Indie", "Cozy"]
 DEFAULT_PRICE = 15
 DEFAULT_BUDGET = 60000
-# Les deux niches du fil rouge, mises en avant sur la carte du marché.
+# The two niches of the running example, highlighted on the market map.
 HIGHLIGHTED_NICHES = ["Cozy", "Rogue-like"]
 
 VERDICT_STYLE = {"GO": "🟢 GO", "RISKY": "🟠 RISKY", "NO-GO": "🔴 NO-GO"}
-SCENARIO_NAMES = {"low": "Bas (20 ventes/avis)", "mid": "Moyen (40 ventes/avis)",
-                  "high": "Haut (60 ventes/avis)"}
+SCENARIO_NAMES = {"low": "Low (20 sales/review)", "mid": "Mid (40 sales/review)",
+                  "high": "High (60 sales/review)"}
 
-# Chargement et estimations UNE SEULE FOIS, au démarrage : chaque clic réutilise
-# ces données au lieu de relire 70 000 jeux.
+# Load the data and compute the estimates ONCE, at start-up: every click reuses
+# them instead of reading 70,000 games again.
 if not os.path.exists(CLEAN_PATH):
-    raise SystemExit("data/games_clean.csv introuvable : lancez d'abord  python src/cleaning.py")
+    raise SystemExit("data/games_clean.csv not found: run  python src/cleaning.py  first")
 GAMES = add_estimates(load_clean(CLEAN_PATH))
-TAG_CHOICES = sorted(set(explode_tags(GAMES)["tag"].value_counts().head(N_TAGS_OFFERED).index)
-                     | set(DEFAULT_TAGS) | {"Rogue-like"})
 
-
-def dollars(value):
-    """12345.6 -> "12 346 $"."""
-    return f"{value:,.0f} $".replace(",", " ")
+# Tags offered: the most frequent ones, plus those of the running example, in alphabetical order.
+TAG_CHOICES = list(explode_tags(GAMES)["tag"].value_counts().head(N_TAGS_OFFERED).index)
+for tag in DEFAULT_TAGS + HIGHLIGHTED_NICHES:
+    if tag not in TAG_CHOICES:
+        TAG_CHOICES.append(tag)
+TAG_CHOICES.sort()
 
 
 def evaluate_concept(tags, price, budget):
-    """Fonction du bouton « Évaluer » : renvoie (verdict, détails, figure revenus, figure prix)."""
+    """Callback of the "Evaluate" button: returns (verdict, details, revenue figure, price figure)."""
     try:
         concept = GameConcept(tags, price, budget)
     except ValueError as error:
@@ -57,39 +56,47 @@ def evaluate_concept(tags, price, budget):
 
     result = concept.evaluate(GAMES)
     if result["n_comparables"] == 0:
-        return ("## 🔴 Aucun jeu comparable",
-                "Aucun jeu ne combine tous ces tags à ce prix. Retirez un tag ou changez le prix.",
+        return ("## 🔴 No comparable game",
+                "No game combines all these tags at this price. Remove a tag or change the price.",
                 None, None)
 
-    verdict = (f"## {VERDICT_STYLE[result['recommendation']]} : "
-               f"{result['probabilities']['mid']:.0%} des jeux comparables ont remboursé {dollars(budget)}")
+    verdict = (f"## {VERDICT_STYLE[result['recommendation']]}: "
+               f"{result['probabilities']['mid']:.0%} of comparable games covered {format_dollars(budget)}")
 
     p25, median, p75 = result["revenue_range"]
+    recommended_price = result["recommended_price"]
+    if recommended_price is None:
+        recommended_price = "not determined (too few games)"
+    low_price = price * (1 - PRICE_TOLERANCE)
+    high_price = price * (1 + PRICE_TOLERANCE)
+
     lines = [
-        f"**{result['n_comparables']} jeux comparables** (tags : {', '.join(tags)} ; prix entre "
-        f"{price * (1 - PRICE_TOLERANCE):.2f} $ et {price * (1 + PRICE_TOLERANCE):.2f} $).",
+        f"**{result['n_comparables']} comparable games** (tags: {', '.join(tags)}; price between "
+        f"${low_price:.2f} and ${high_price:.2f}).",
         "",
-        f"**Fourchette de revenu net** (scénario moyen) : {dollars(p25)} à {dollars(p75)}, "
-        f"médiane {dollars(median)}.",
+        f"**Net revenue range** (mid scenario): {format_dollars(p25)} to {format_dollars(p75)}, "
+        f"median {format_dollars(median)}.",
         "",
-        f"**Prix conseillé** : {result['recommended_price'] or 'non déterminé (trop peu de jeux)'}",
+        f"**Recommended price**: {recommended_price}",
         "",
-        "| Scénario | Probabilité de rembourser le budget | Verdict |",
+        "| Scenario | Probability of covering the budget | Verdict |",
         "|---|---|---|",
     ]
     for scenario, name in SCENARIO_NAMES.items():
         lines.append(f"| {name} | {result['probabilities'][scenario]:.0%} | "
                      f"{result['recommendations'][scenario]} |")
-    if result["warning"]:
-        lines += ["", f"⚠️ **{result['warning']}**"]
+    if result["warning"] is not None:
+        lines.append("")
+        lines.append(f"⚠️ **{result['warning']}**")
 
-    return (verdict, "\n".join(lines),
-            revenue_distribution(concept.comparables, budget),
-            price_chart(price_table(concept.niche), niche_name=" + ".join(tags)))
+    details = "\n".join(lines)
+    distribution_figure = revenue_distribution(concept.comparables, budget)
+    price_figure = price_chart(price_table(concept.niche), niche_name=" + ".join(tags))
+    return verdict, details, distribution_figure, price_figure
 
 
 def explain_concept(tags, price, budget):
-    """Fonction du bouton « Expliquer » : avis rédigé par l'IA (bonus), ou message si indisponible."""
+    """Callback of the "Explain" button: advice written by the AI (bonus), or a message if it is unavailable."""
     try:
         concept = GameConcept(tags, price, budget)
     except ValueError as error:
@@ -98,83 +105,83 @@ def explain_concept(tags, price, budget):
 
 
 def market_map(min_games):
-    """Fonction du bouton « Afficher » : renvoie (carte des niches, tableau des niches prometteuses)."""
+    """Callback of the "Show" button: returns (niche map, table of promising niches)."""
     niches = niche_table(GAMES, min_games=int(min_games))
     table = promising_niches(niches).reset_index()
     table = table[["tag", "n_games", "median_revenue", "profitable_share", "growth"]]
     table["median_revenue"] = table["median_revenue"].round(0)
     table["profitable_share"] = (100 * table["profitable_share"]).round(0)
     table["growth"] = (100 * table["growth"]).round(0)
-    table.columns = ["Tag", "Nombre de jeux", "Revenu médian ($)", "Jeux rentables (%)",
-                     "Évolution des sorties (%)"]
+    table.columns = ["Tag", "Number of games", "Median revenue ($)", "Profitable games (%)",
+                     "Change in releases (%)"]
     return niche_map(niches, highlight=HIGHLIGHTED_NICHES), table
 
 
 METHOD_TEXT = """
-## D'où viennent les données ?
-- **Steam Games Dataset** (FronkonGames, Kaggle, licence MIT) : environ 126 000 jeux, collectés en mars 2026.
-- Après nettoyage : **71 352 jeux** payants, tagués, sortis entre 2015 et août 2025.
-- Deux pièges corrigés : un décalage d'une colonne dans le fichier, et des prix enregistrés en promotion (on retrouve le prix plein).
+## Where does the data come from?
+- **Steam Games Dataset** (FronkonGames, Kaggle, MIT licence): about 126,000 games, collected in March 2026.
+- After cleaning: **71,352 paid, tagged games** released between 2015 and August 2025.
+- Two traps fixed: a one-column shift in the file, and prices recorded during a sale (we recover the full price).
 
-## Comment on estime le revenu d'un jeu
-Steam ne publie pas les ventes. On les estime à partir du nombre d'avis :
-- **1 avis ≈ 20 / 40 / 60 ventes** (scénarios bas / moyen / haut, méthode Boxleiter) ;
-- Steam garde **30 %** du prix ; **10 %** des ventes sont remboursées ; le prix moyen payé est **75 %** du prix plein (soldes).
+## How we estimate a game's revenue
+Steam does not publish sales. We estimate them from the number of reviews:
+- **1 review ≈ 20 / 40 / 60 sales** (low / mid / high scenarios, Boxleiter method);
+- Steam keeps **30 %** of the price; **10 %** of sales are refunded; the average price paid is **75 %** of the full price (sales).
 
-**Revenu net = avis × 40 × prix × 0,9 × 0,75 × 0,7**
+**Net revenue = reviews × 40 × price × 0.9 × 0.75 × 0.7**
 
-Validation : notre estimation est plutôt sous la fourchette d'owners SteamSpy (prudente), et les ventes officielles de Valheim, Balatro et Hollow Knight tombent entre nos scénarios bas et moyen.
+Validation: our estimate is mostly below the SteamSpy owners range (prudent), and the official sales of Valheim, Balatro and Hollow Knight fall between our low and mid scenarios.
 
-## Comment on décide
-- **Jeux comparables** : ceux qui ont tous vos tags, un prix à ± 50 % du vôtre, sortis depuis 2020 (ou toutes années s'il y en a moins de 30).
-- **Probabilité** = part des comparables dont le revenu net dépasse votre budget. On utilise la médiane, pas la moyenne : quelques succès à plusieurs millions fausseraient tout.
-- **Verdict** : GO à partir de 50 %, RISKY de 25 à 50 %, NO-GO en dessous. Moins de 30 comparables : jamais GO.
+## How we decide
+- **Comparable games**: those that have all your tags, a price within ± 50 % of yours, released since 2020 (or any year if there are fewer than 30).
+- **Probability** = share of comparable games whose net revenue exceeds your budget. We use the median, not the mean: a few multi-million hits would distort everything.
+- **Verdict**: GO from 50 %, RISKY from 25 to 50 %, NO-GO below. Fewer than 30 comparable games: never GO.
 
-## Ce que l'outil ne voit pas
-- Ni le marketing, ni la qualité du jeu : deux jeux identiques sur le papier peuvent avoir des destins opposés.
-- Les owners ne sont pas des ventes (clés offertes, bundles) ; le ratio avis / ventes varie selon le genre.
-- Biais du survivant : les jeux retirés de Steam ne sont pas dans les données, donc les chances sont un peu optimistes.
-- Les jeux free-to-play sont exclus.
+## What the tool cannot see
+- Neither marketing nor game quality: two games that look identical on paper can have opposite fates.
+- Owners are not sales (gifted keys, bundles); the reviews / sales ratio varies by genre.
+- Survivorship bias: games removed from Steam are not in the data, so the odds are slightly optimistic.
+- Free-to-play games are excluded.
 """
 
 
 with gr.Blocks(title="IndieScope") as demo:
-    gr.Markdown("# 🎮 IndieScope\nMon jeu indé peut-il rembourser son budget sur Steam ?")
+    gr.Markdown("# 🎮 IndieScope\nCan my indie game cover its budget on Steam?")
 
-    with gr.Tab("Simulateur"):
+    with gr.Tab("Simulator"):
         with gr.Row():
             with gr.Column(scale=1):
-                tags_input = gr.CheckboxGroup(TAG_CHOICES, value=DEFAULT_TAGS, label="Tags de votre jeu")
-                price_input = gr.Number(value=DEFAULT_PRICE, label="Prix de vente ($)", minimum=0)
-                budget_input = gr.Number(value=DEFAULT_BUDGET, label="Budget du studio ($)", minimum=0)
-                evaluate_button = gr.Button("Évaluer", variant="primary")
+                tags_input = gr.CheckboxGroup(TAG_CHOICES, value=DEFAULT_TAGS, label="Your game's tags")
+                price_input = gr.Number(value=DEFAULT_PRICE, label="Selling price ($)", minimum=0)
+                budget_input = gr.Number(value=DEFAULT_BUDGET, label="Studio budget ($)", minimum=0)
+                evaluate_button = gr.Button("Evaluate", variant="primary")
             with gr.Column(scale=2):
                 verdict_output = gr.Markdown()
                 details_output = gr.Markdown()
         with gr.Row():
-            distribution_plot = gr.Plot(label="Revenus des jeux comparables")
-            price_plot = gr.Plot(label="Revenu par tranche de prix")
+            distribution_plot = gr.Plot(label="Revenue of comparable games")
+            price_plot = gr.Plot(label="Revenue by price band")
         evaluate_button.click(fn=evaluate_concept, inputs=[tags_input, price_input, budget_input],
                               outputs=[verdict_output, details_output, distribution_plot, price_plot])
-        explain_button = gr.Button("Expliquer (avis rédigé par l'IA)")
+        explain_button = gr.Button("Explain (advice written by AI)")
         explanation_output = gr.Markdown()
         explain_button.click(fn=explain_concept, inputs=[tags_input, price_input, budget_input],
                              outputs=explanation_output)
 
-    with gr.Tab("Carte du marché"):
+    with gr.Tab("Market map"):
         min_games_input = gr.Slider(20, 500, value=MIN_GAMES_PER_NICHE, step=10,
-                                    label="Nombre minimum de jeux par niche")
-        map_button = gr.Button("Afficher", variant="primary")
-        map_plot = gr.Plot(label="Carte des niches")
-        gr.Markdown("### Niches prometteuses\nPeu de concurrence, au moins 30 % de jeux rentables "
-                    "(> 100 000 $), sorties qui n'ont pas doublé en 2 ans.")
+                                    label="Minimum number of games per niche")
+        map_button = gr.Button("Show", variant="primary")
+        map_plot = gr.Plot(label="Niche map")
+        gr.Markdown("### Promising niches\nLittle competition, at least 30 % of profitable games "
+                    "(> $100,000), releases that have not doubled in 2 years.")
         niches_output = gr.DataFrame()
         map_button.click(fn=market_map, inputs=min_games_input, outputs=[map_plot, niches_output])
 
-    with gr.Tab("Méthode"):
+    with gr.Tab("Method"):
         gr.Markdown(METHOD_TEXT)
 
-    # Remplit les deux premiers onglets dès l'ouverture : la démo commence tout de suite.
+    # Fill the first two tabs on opening, so the demo starts right away.
     demo.load(fn=evaluate_concept, inputs=[tags_input, price_input, budget_input],
               outputs=[verdict_output, details_output, distribution_plot, price_plot])
     demo.load(fn=market_map, inputs=min_games_input, outputs=[map_plot, niches_output])

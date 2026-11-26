@@ -1,50 +1,51 @@
-"""Estimation des ventes et du revenu net de chaque jeu, en 3 scénarios.
+"""Estimate the sales and net revenue of each game, in 3 scenarios.
 
-Steam ne publie pas les ventes : on les estime à partir du nombre d'avis
-(méthode Boxleiter). Chaque hypothèse est une constante commentée ci-dessous.
+Steam does not publish sales: we estimate them from the number of reviews
+(Boxleiter method). Each assumption is a constant with a comment below.
 """
 
-# Ventes par avis (méthode Boxleiter) : un jeu reçoit en moyenne 1 avis
-# pour 20 à 60 ventes (règle empirique de l'industrie). 40 est la valeur
-# centrale. Validation (notebook 03_estimation) : nos ventes sont plutôt
-# sous la fourchette SteamSpy (estimation prudente), et les ventes officielles
-# de Valheim, Balatro et Hollow Knight tombent entre les scénarios bas et moyen.
+# Sales per review (Boxleiter method): a game gets on average 1 review
+# for 20 to 60 sales (industry rule of thumb). 40 is the middle value.
+# Validation (notebook 03_estimation): our sales are mostly below the
+# SteamSpy range (a prudent estimate), and the official sales of Valheim,
+# Balatro and Hollow Knight fall between the low and mid scenarios.
 SALES_PER_REVIEW = {"low": 20, "mid": 40, "high": 60}
 
-# Part du prix gardée par Steam : 30 % (taux standard sous 10 M$ de revenu).
+# Share of the price kept by Steam: 30 % (standard rate below $10M of revenue).
 STEAM_SHARE = 0.30
 
-# Part des ventes remboursées : Steam rembourse sur demande (moins de 2 h
-# de jeu, moins de 14 jours). On retient un ordre de grandeur de 10 %.
+# Share of sales refunded: Steam refunds on request (less than 2 h of
+# play, less than 14 days). We use an order of magnitude of 10 %.
 REFUND_RATE = 0.10
 
-# Prix moyen réellement payé / prix affiché : une grande partie des ventes
-# se fait pendant les soldes. On retient une remise moyenne de 25 %.
+# Average price actually paid / listed price: a large share of sales
+# happens during Steam sales. We assume an average discount of 25 %.
 PRICE_PAID_RATIO = 0.75
 
-SCENARIOS = list(SALES_PER_REVIEW)
+# The 3 scenarios, from the most prudent to the most optimistic.
+SCENARIOS = ["low", "mid", "high"]
 
 
 def estimate_sales(n_reviews, scenario="mid"):
-    """Estime le nombre de ventes à partir du nombre d'avis.
+    """Estimate the number of sales from the number of reviews.
 
-    n_reviews : int ou pandas.Series, nombre total d'avis (positifs + négatifs).
-    scenario : "low", "mid" ou "high" (clé de SALES_PER_REVIEW).
-    Renvoie le nombre de ventes estimé (même type que n_reviews).
+    n_reviews: int or pandas.Series, total number of reviews (positive + negative).
+    scenario: "low", "mid" or "high" (key of SALES_PER_REVIEW).
+    Returns the estimated number of sales (same type as n_reviews).
     """
     if scenario not in SALES_PER_REVIEW:
-        raise ValueError(f"Scénario inconnu : {scenario}. Choisir parmi {SCENARIOS}.")
+        raise ValueError(f"Unknown scenario: {scenario}. Choose from {SCENARIOS}.")
     return n_reviews * SALES_PER_REVIEW[scenario]
 
 
 def net_revenue(sales, price, refund_rate=REFUND_RATE, price_paid_ratio=PRICE_PAID_RATIO):
-    """Calcule le revenu net du studio (après Steam, remboursements et promotions).
+    """Compute the studio's net revenue (after Steam's share, refunds and discounts).
 
-    sales : int/float ou Series, nombre de ventes.
-    price : float ou Series, prix affiché en dollars.
-    refund_rate : part des ventes remboursées (0 pour l'ignorer).
-    price_paid_ratio : prix moyen payé / prix affiché (1 pour l'ignorer).
-    Renvoie le revenu net en dollars.
+    sales: int/float or Series, number of sales.
+    price: float or Series, listed price in dollars.
+    refund_rate: share of sales refunded (0 to ignore it).
+    price_paid_ratio: average price paid / listed price (1 to ignore it).
+    Returns the net revenue in dollars.
     """
     kept_sales = sales * (1 - refund_rate)
     price_paid = price * price_paid_ratio
@@ -52,11 +53,11 @@ def net_revenue(sales, price, refund_rate=REFUND_RATE, price_paid_ratio=PRICE_PA
 
 
 def add_estimates(df, refund_rate=REFUND_RATE, price_paid_ratio=PRICE_PAID_RATIO):
-    """Ajoute le nombre d'avis, les ventes et le revenu net dans les 3 scénarios.
+    """Add the number of reviews, the sales and the net revenue in the 3 scenarios.
 
-    df : DataFrame propre (contrat de données : colonnes positive, negative, price).
-    Renvoie une copie de df avec les colonnes reviews, sales_low/mid/high
-    et revenue_low/mid/high.
+    df: clean DataFrame (data contract: columns positive, negative, price).
+    Returns a copy of df with the columns reviews, sales_low/mid/high
+    and revenue_low/mid/high.
     """
     df = df.copy()
     df["reviews"] = df["positive"] + df["negative"]
